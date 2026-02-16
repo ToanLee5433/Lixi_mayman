@@ -371,7 +371,7 @@ const App = {
         else { pe.style.display = 'none'; ptb.innerHTML = pl.map((p, i) => { const tu = h.filter(x => x.playerName === p.name).length, tl = r.maxTurns - tu; return '<tr><td>' + (i + 1) + '</td><td>' + this.esc(p.name) + '</td><td>' + tl + '/' + r.maxTurns + '</td><td>' + (tl > 0 ? '<span class="badge badge-green">Chưa hết</span>' : '<span class="badge badge-red">Hết lượt</span>') + '</td></tr>'; }).join(''); }
         const htb = document.getElementById('history-tbody'), he = document.getElementById('history-empty');
         if (!h.length) { htb.innerHTML = ''; he.style.display = 'block'; }
-        else { he.style.display = 'none'; htb.innerHTML = h.slice().reverse().map(x => { const t = new Date(x.time).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }); return '<tr><td>' + this.esc(x.playerName) + '</td><td><span class="badge ' + (x.value > 100000 ? 'badge-gold' : 'badge-green') + '">' + this.esc(x.prizeName) + '</span></td><td>' + t + '</td></tr>'; }).join(''); }
+        else { he.style.display = 'none'; htb.innerHTML = h.slice().reverse().map(x => { const t = new Date(x.time).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }); return '<tr><td>' + this.esc(x.playerName) + '</td><td><span class="badge ' + (x.value > 100000 ? 'badge-gold' : 'badge-green') + '">' + this.esc(x.prizeName) + '</span></td><td>' + t + '</td></tr>'; }).join(''); }
         this.updateRoomStatusUI(r);
     },
     updateRoomStatusUI(r) {
@@ -482,7 +482,15 @@ const App = {
         else {
             jl.innerHTML = ''; for (const rj of hist.joined) {
                 const r = await Storage.getRoom(rj.code), card = document.createElement('div'); card.className = 'history-room-card';
-                if (r) { const my = (r.history || []).filter(h => h.playerName === rj.playerName), mt = my.reduce((s, h) => s + (h.value > 0 ? h.value : 0), 0); card.innerHTML = '<div class="history-room-header"><span class="history-room-name">' + this.esc(r.name) + '</span><span class="history-room-code">#' + r.code + '</span></div><div class="history-room-meta"><span>👤 ' + this.esc(rj.playerName) + '</span><span>🎰 ' + my.length + '</span><span>💰 ' + this.formatMoney(mt) + '</span></div>'; }
+                if (r) {
+                    const my = (r.history || []).filter(h => h.playerName === rj.playerName);
+                    const mt = my.reduce((s, h) => s + (h.value > 0 ? h.value : 0), 0);
+                    const list = my.slice().reverse().map(m => {
+                        const t = new Date(m.time).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+                        return '<div style="font-size:0.85rem;margin-top:4px;border-top:1px solid rgba(251,191,36,0.1);padding-top:4px;display:flex;justify-content:space-between"><span style="color:var(--gold-300)">' + this.esc(m.prizeName) + '</span><span style="color:var(--text-muted);font-size:0.75rem">' + t + '</span></div>';
+                    }).join('');
+                    card.innerHTML = '<div class="history-room-header"><span class="history-room-name">' + this.esc(r.name) + '</span><span class="history-room-code">#' + r.code + '</span></div><div class="history-room-meta"><span>👤 ' + this.esc(rj.playerName) + '</span><span>🎰 ' + my.length + ' lượt</span><span>💰 ' + this.formatMoney(mt) + '</span></div>' + (list ? '<div style="margin-top:8px">' + list + '</div>' : '');
+                }
                 else { card.innerHTML = '<div class="history-room-header"><span class="history-room-name">' + this.esc(rj.name || 'Phòng') + '</span><span class="history-room-code">#' + rj.code + '</span></div><div class="history-room-meta"><span class="text-muted">Phòng đã xoá</span></div>'; card.style.opacity = '0.5'; card.style.cursor = 'default'; }
                 jl.appendChild(card);
             }
