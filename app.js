@@ -138,6 +138,22 @@ const App = {
         this.initMusic();
         this.bindEvents();
         this.initAuth();
+        this.restoreState();
+    },
+    async restoreState() {
+        const s = State.load();
+        if (s && s.code) {
+            const r = await Storage.getRoom(s.code);
+            if (r) {
+                this.currentRoom = r;
+                if (s.player) {
+                    this.currentPlayer = s.player;
+                    if (r.mode === 'wheel') this.startWheelGame(); else this.startEnvelopeGame();
+                } else {
+                    this.showDashboard();
+                }
+            } else { State.clear(); }
+        }
     },
 
     // ==================== BIND ALL EVENTS ====================
@@ -384,6 +400,7 @@ const App = {
         document.getElementById('dashboard-room-code').textContent = r.code;
         this.refreshDashboard(r); this.showScreen('screen-host-dashboard');
         this.dashboardListener = r.code; Storage.onRoomChange(r.code, d => { this.currentRoom = d; this.refreshDashboard(d); });
+        State.save({ code: r.code }); // Save Host State
     },
     refreshDashboard(r) {
         const pl = r.players || [], h = r.history || [];
@@ -425,6 +442,7 @@ const App = {
         if (!r.players.find(p => p.name === name)) { r.players.push({ name, joinedAt: new Date().toISOString(), uid: this.currentUser.uid }); await Storage.saveRoom(code, r); }
         const tu = r.history.filter(h => h.playerName === name).length; if (tu >= r.maxTurns) { this.showToast('Bạn đã hết lượt!'); Sound.play('error'); return; }
         this.currentRoom = r; this.currentPlayer = name;
+        State.save({ code: r.code, player: name }); // Save Player State
         if (this.currentUser) await Storage.saveJoinedRoom(this.currentUser.uid, code, r.name, name);
         if (r.mode === 'wheel') this.startWheelGame(); else this.startEnvelopeGame();
     },

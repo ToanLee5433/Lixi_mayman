@@ -58,6 +58,9 @@ users/
 4. **Sửa Lỗi Giao Diện**:
    - Nút đăng ký/Google bấm được bình thường.
    - Toast thông báo hiện góc trên phải, tự tắt sau 5s.
+5. **Khắc Phục Lỗi Mất Lịch Sử**:
+   - Sửa lỗi mất thông tin người chơi khi reload trang (F5).
+   - Tự động tạo lại dữ liệu lịch sử nếu bị sót.
 
 ### 💾 Tính năng Lưu Trữ Nâng Cao (Mới)
 Lịch sử giải thưởng hiện đã được lưu trực tiếp vào tài khoản người chơi.
