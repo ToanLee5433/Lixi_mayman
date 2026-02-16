@@ -19,10 +19,31 @@ const Storage = {
         try { const h = await this.getUserHistory(uid); if (!h.created.find(r => r.code === code)) { h.created.unshift({ code, name, time: new Date().toISOString() }); if (h.created.length > 30) h.created = h.created.slice(0, 30); await this.userRef(uid).child('history').set(h); } } catch (e) { console.error(e); }
     },
     async saveJoinedRoom(uid, code, name, playerName) {
-        try { const h = await this.getUserHistory(uid); if (!h.joined.find(r => r.code === code && r.playerName === playerName)) { h.joined.unshift({ code, name, playerName, time: new Date().toISOString(), wins: [] }); if (h.joined.length > 50) h.joined = h.joined.slice(0, 50); await this.userRef(uid).child('history').set(h); } } catch (e) { console.error(e); }
+        try {
+            const h = await this.getUserHistory(uid);
+            if (!Array.isArray(h.joined)) h.joined = [];
+            if (!h.joined.find(r => r.code === code && r.playerName === playerName)) {
+                h.joined.unshift({ code, name, playerName, time: new Date().toISOString(), wins: [] });
+                if (h.joined.length > 50) h.joined = h.joined.slice(0, 50);
+                await this.userRef(uid).child('history').set(h);
+            }
+        } catch (e) { console.error('saveJoinedRoom error', e); }
     },
-    async saveWin(uid, code, prizeName, value) {
-        try { const h = await this.getUserHistory(uid); const r = h.joined.find(x => x.code === code); if (r) { r.wins = r.wins || []; r.wins.unshift({ prizeName, value, time: new Date().toISOString() }); await this.userRef(uid).child('history').set(h); } } catch (e) { console.error(e); }
+    async saveWin(uid, code, roomName, playerName, prizeName, value) {
+        try {
+            const h = await this.getUserHistory(uid);
+            if (!Array.isArray(h.joined)) h.joined = [];
+            let r = h.joined.find(x => x.code === code && x.playerName === playerName);
+            if (!r) {
+                // Auto-join if missing
+                r = { code, name: roomName, playerName, time: new Date().toISOString(), wins: [] };
+                h.joined.unshift(r);
+            }
+            r.wins = r.wins || [];
+            r.wins.unshift({ prizeName, value, time: new Date().toISOString() });
+            if (h.joined.length > 50) h.joined = h.joined.slice(0, 50);
+            await this.userRef(uid).child('history').set(h);
+        } catch (e) { console.error('saveWin error', e); }
     }
 };
 
@@ -449,7 +470,7 @@ const App = {
         const r = await Storage.getRoom(this.currentRoom.code); if (!r) return; r.history = r.history || [];
         r.history.push({ playerName: this.currentPlayer, prizeName: prize.name, value: prize.value === -1 ? 0 : (prize.value || 0), time: new Date().toISOString(), uid: this.currentUser ? this.currentUser.uid : null });
         await Storage.saveRoom(r.code, r); this.currentRoom = r;
-        if (this.currentUser) await Storage.saveWin(this.currentUser.uid, r.code, prize.name, prize.value === -1 ? 0 : (prize.value || 0));
+        if (this.currentUser) await Storage.saveWin(this.currentUser.uid, r.code, r.name, this.currentPlayer, prize.name, prize.value === -1 ? 0 : (prize.value || 0));
         const $ = id => document.getElementById(id), big = (prize.value || 0) >= 100000, luck = prize.value === 0 && prize.name.toLowerCase().includes('may man'), extra = prize.value === -1;
         if (luck) { $('result-emoji').textContent = '🍀'; $('result-title').textContent = 'Chúc may mắn!'; $('result-prize').textContent = prize.name; $('result-message').textContent = 'Lần sau sẽ may mắn hơn!'; }
         else if (extra) { $('result-emoji').textContent = '🎁'; $('result-title').textContent = 'Tuyệt vời!'; $('result-prize').textContent = 'Thêm 1 lượt!'; $('result-message').textContent = 'Bạn được thưởng thêm 1 lượt chơi'; }
