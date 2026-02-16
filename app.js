@@ -19,7 +19,10 @@ const Storage = {
         try { const h = await this.getUserHistory(uid); if (!h.created.find(r => r.code === code)) { h.created.unshift({ code, name, time: new Date().toISOString() }); if (h.created.length > 30) h.created = h.created.slice(0, 30); await this.userRef(uid).child('history').set(h); } } catch (e) { console.error(e); }
     },
     async saveJoinedRoom(uid, code, name, playerName) {
-        try { const h = await this.getUserHistory(uid); if (!h.joined.find(r => r.code === code && r.playerName === playerName)) { h.joined.unshift({ code, name, playerName, time: new Date().toISOString() }); if (h.joined.length > 50) h.joined = h.joined.slice(0, 50); await this.userRef(uid).child('history').set(h); } } catch (e) { console.error(e); }
+        try { const h = await this.getUserHistory(uid); if (!h.joined.find(r => r.code === code && r.playerName === playerName)) { h.joined.unshift({ code, name, playerName, time: new Date().toISOString(), wins: [] }); if (h.joined.length > 50) h.joined = h.joined.slice(0, 50); await this.userRef(uid).child('history').set(h); } } catch (e) { console.error(e); }
+    },
+    async saveWin(uid, code, prizeName, value) {
+        try { const h = await this.getUserHistory(uid); const r = h.joined.find(x => x.code === code); if (r) { r.wins = r.wins || []; r.wins.unshift({ prizeName, value, time: new Date().toISOString() }); await this.userRef(uid).child('history').set(h); } } catch (e) { console.error(e); }
     }
 };
 
@@ -401,7 +404,7 @@ const App = {
         if (!r.players.find(p => p.name === name)) { r.players.push({ name, joinedAt: new Date().toISOString(), uid: this.currentUser.uid }); await Storage.saveRoom(code, r); }
         const tu = r.history.filter(h => h.playerName === name).length; if (tu >= r.maxTurns) { this.showToast('Bạn đã hết lượt!'); Sound.play('error'); return; }
         this.currentRoom = r; this.currentPlayer = name;
-        await Storage.saveJoinedRoom(this.currentUser.uid, code, r.name, name); Sound.play('win');
+        if (this.currentUser) await Storage.saveJoinedRoom(this.currentUser.uid, code, r.name, name);
         if (r.mode === 'wheel') this.startWheelGame(); else this.startEnvelopeGame();
     },
 
@@ -444,8 +447,9 @@ const App = {
 
     async handlePrizeWon(prize) {
         const r = await Storage.getRoom(this.currentRoom.code); if (!r) return; r.history = r.history || [];
-        r.history.push({ playerName: this.currentPlayer, prizeName: prize.name, value: prize.value === -1 ? 0 : (prize.value || 0), time: new Date().toISOString(), uid: this.currentUser.uid });
+        r.history.push({ playerName: this.currentPlayer, prizeName: prize.name, value: prize.value === -1 ? 0 : (prize.value || 0), time: new Date().toISOString(), uid: this.currentUser ? this.currentUser.uid : null });
         await Storage.saveRoom(r.code, r); this.currentRoom = r;
+        if (this.currentUser) await Storage.saveWin(this.currentUser.uid, r.code, prize.name, prize.value === -1 ? 0 : (prize.value || 0));
         const $ = id => document.getElementById(id), big = (prize.value || 0) >= 100000, luck = prize.value === 0 && prize.name.toLowerCase().includes('may man'), extra = prize.value === -1;
         if (luck) { $('result-emoji').textContent = '🍀'; $('result-title').textContent = 'Chúc may mắn!'; $('result-prize').textContent = prize.name; $('result-message').textContent = 'Lần sau sẽ may mắn hơn!'; }
         else if (extra) { $('result-emoji').textContent = '🎁'; $('result-title').textContent = 'Tuyệt vời!'; $('result-prize').textContent = 'Thêm 1 lượt!'; $('result-message').textContent = 'Bạn được thưởng thêm 1 lượt chơi'; }
@@ -481,17 +485,26 @@ const App = {
         if (!hist.joined.length) { jl.innerHTML = ''; jl.appendChild(je); je.style.display = 'block'; }
         else {
             jl.innerHTML = ''; for (const rj of hist.joined) {
-                const r = await Storage.getRoom(rj.code), card = document.createElement('div'); card.className = 'history-room-card';
-                if (r) {
-                    const my = (r.history || []).filter(h => h.playerName === rj.playerName);
-                    const mt = my.reduce((s, h) => s + (h.value > 0 ? h.value : 0), 0);
-                    const list = my.slice().reverse().map(m => {
-                        const t = new Date(m.time).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-                        return '<div style="font-size:0.85rem;margin-top:4px;border-top:1px solid rgba(251,191,36,0.1);padding-top:4px;display:flex;justify-content:space-between"><span style="color:var(--gold-300)">' + this.esc(m.prizeName) + '</span><span style="color:var(--text-muted);font-size:0.75rem">' + t + '</span></div>';
-                    }).join('');
-                    card.innerHTML = '<div class="history-room-header"><span class="history-room-name">' + this.esc(r.name) + '</span><span class="history-room-code">#' + r.code + '</span></div><div class="history-room-meta"><span>👤 ' + this.esc(rj.playerName) + '</span><span>🎰 ' + my.length + ' lượt</span><span>💰 ' + this.formatMoney(mt) + '</span></div>' + (list ? '<div style="margin-top:8px">' + list + '</div>' : '');
+                const r = await Storage.getRoom(rj.code);
+                let myWins = rj.wins || [];
+                if (myWins.length === 0 && r) {
+                    const h = r.history || [];
+                    myWins = h.filter(x => x.playerName === rj.playerName).reverse().map(x => ({ prizeName: x.prizeName, time: x.time, value: x.value }));
                 }
-                else { card.innerHTML = '<div class="history-room-header"><span class="history-room-name">' + this.esc(rj.name || 'Phòng') + '</span><span class="history-room-code">#' + rj.code + '</span></div><div class="history-room-meta"><span class="text-muted">Phòng đã xoá</span></div>'; card.style.opacity = '0.5'; card.style.cursor = 'default'; }
+                const tm = myWins.reduce((s, h) => s + (h.value > 0 ? h.value : 0), 0);
+                const list = myWins.map(m => {
+                    const t = new Date(m.time).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+                    return '<div style="font-size:0.85rem;margin-top:4px;border-top:1px solid rgba(251,191,36,0.1);padding-top:4px;display:flex;justify-content:space-between"><span style="color:var(--gold-300)">' + this.esc(m.prizeName) + '</span><span style="color:var(--text-muted);font-size:0.75rem">' + t + '</span></div>';
+                }).join('');
+
+                const roomName = (r ? r.name : rj.name) || 'Phòng';
+                const status = r ? '' : ' <span class="text-muted" style="font-size:0.8em">(Đã xoá)</span>';
+
+                const card = document.createElement('div'); card.className = 'history-room-card';
+                card.innerHTML = '<div class="history-room-header"><span class="history-room-name">' + this.esc(roomName) + status + '</span><span class="history-room-code">#' + rj.code + '</span></div>' +
+                    '<div class="history-room-meta"><span>👤 ' + this.esc(rj.playerName) + '</span><span>🎰 ' + myWins.length + ' lượt</span><span>💰 ' + this.formatMoney(tm) + '</span></div>' +
+                    (list ? '<div style="margin-top:8px">' + list + '</div>' : '');
+
                 jl.appendChild(card);
             }
         }
