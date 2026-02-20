@@ -1945,6 +1945,45 @@ select.input-field option {
     border-radius: var(--radius-md);
 }
 
+/* QR Modal specific */
+.qr-modal-box {
+    text-align: center;
+    padding: var(--space-xl) var(--space-xl) var(--space-lg);
+}
+
+.qr-code-frame {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: #fff;
+    border-radius: 16px;
+    padding: 14px;
+    margin: 0 auto 20px;
+    width: fit-content;
+    box-shadow: 0 0 0 4px rgba(251,191,36,0.35), 0 4px 24px rgba(0,0,0,0.35);
+}
+
+.qr-code-frame table {
+    display: block;
+    margin: 0 auto;
+}
+
+.qr-code-frame img {
+    display: block;
+}
+
+#qr-code {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.qr-modal-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 4px;
+}
+
 /* ==============================================
    3 COLUMN MODE GRID
    ============================================== */
