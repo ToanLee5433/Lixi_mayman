@@ -9,9 +9,21 @@ const Storage = {
     roomRef(code) { return db.ref('rooms/' + code); },
     userRef(uid) { return db.ref('users/' + uid); },
     async getRoom(code) {
-        try { const s = await this.roomRef(code).once('value'); const d = s.val(); if (!d) return null; d.players = d.players || []; d.history = d.history || []; return d; } catch (e) { return null; }
+        try {
+            const s = await this.roomRef(code).once('value');
+            const d = s.val();
+            if (!d) return null;
+            d.players = d.players || []; d.history = d.history || [];
+            return d;
+        } catch (e) {
+            console.error('getRoom error:', e.code, e.message);
+            return null;
+        }
     },
-    async saveRoom(code, room) { try { await this.roomRef(code).set(room); } catch (e) { console.error(e); } },
+    async saveRoom(code, room) {
+        try { await this.roomRef(code).set(room); return true; }
+        catch (e) { console.error('saveRoom error:', e.code, e.message); return false; }
+    },
     async deleteRoom(code) { try { await this.roomRef(code).remove(); } catch (e) { console.error(e); } },
     onRoomChange(code, cb) { this.roomRef(code).on('value', s => { const d = s.val(); if (d) { d.players = d.players || []; d.history = d.history || []; cb(d); } }); },
     offRoomChange(code) { this.roomRef(code).off('value'); },
@@ -490,18 +502,20 @@ const App = {
         auth.onAuthStateChanged(async (user) => {
             if (user) {
                 if (user.isAnonymous) {
-                    // Anonymous (guest) sign-in
                     if (this._isGuest) {
-                        this.currentUser = user; // needed for Firebase rules
+                        this.currentUser = user;
                         this.updateUserBar(null);
+                        const btn = document.getElementById('btn-guest-play');
+                        if (btn) { btn.disabled = false; btn.textContent = '\uD83D\uDC7B Chơi ẩn danh'; }
                         if (this._deepLinkRoom) {
                             this.showScreen('screen-home', true);
                             this.showScreen('screen-player-join');
                         } else {
                             this.showScreen('screen-player-join');
                         }
+                        Sound.play('click');
                     } else {
-                        // Stale anonymous session from previous visit
+                        // Stale anonymous session - sign out silently
                         await auth.signOut();
                     }
                     return;
@@ -543,13 +557,18 @@ const App = {
 
     guestPlay() {
         this._isGuest = true;
-        auth.signInAnonymously().catch(() => {
-            // Fallback nếu anonymous auth bị tắt trong Firebase Console
-            this.currentUser = null;
-            this.updateUserBar(null);
-            this.showScreen('screen-player-join');
-        });
-        Sound.play('click');
+        const btn = document.getElementById('btn-guest-play');
+        if (btn) { btn.disabled = true; btn.textContent = '⏳ Đang kết nối...'; }
+        auth.signInAnonymously()
+            .catch((e) => {
+                // Anonymous auth not enabled - still allow guest with public read rules
+                console.warn('Anonymous auth unavailable:', e.code);
+                this.currentUser = null;
+                this.updateUserBar(null);
+                if (btn) { btn.disabled = false; btn.textContent = '👻 Chơi ẩn danh'; }
+                this.showScreen('screen-player-join');
+                Sound.play('click');
+            });
     },
 
     switchAuthTab(tabId, btnEl) {
@@ -1177,20 +1196,41 @@ const App = {
 
     // ==================== PLAYER ====================
     async joinRoom() {
-        const name = document.getElementById('player-name').value.trim(), code = document.getElementById('player-room-code').value.replace(/\D/g, '').trim();
+        const name = document.getElementById('player-name').value.trim();
+        const code = document.getElementById('player-room-code').value.replace(/\D/g, '').trim();
         if (!name) { this.showToast('Vui lòng nhập tên', 'error'); Sound.play('error'); return; }
         if (!code || code.length !== 6) { this.showToast('Mã phòng phải có 6 số', 'error'); Sound.play('error'); return; }
+        const btn = document.getElementById('btn-join-room');
+        if (btn) { btn.disabled = true; btn.textContent = '⏳ Đang tìm...'; }
         this.showToast('Đang tìm phòng...');
-        const r = await Storage.getRoom(code); if (!r) { this.showToast('Không tìm thấy phòng!', 'error'); Sound.play('error'); return; }
-        if (!r.isOpen) { this.showToast('Phòng đã khoá', 'error'); Sound.play('error'); return; }
-        if (this.isRoomExpired(r)) { this.showToast('Phòng đã hết hạn!', 'error'); Sound.play('error'); return; }
-        if (!r.players.find(p => p.name === name)) { r.players.push({ name, joinedAt: new Date().toISOString(), uid: this.currentUser ? this.currentUser.uid : null }); await Storage.saveRoom(code, r); }
-        const tu = r.history.filter(h => h.playerName === name).length; if (tu >= r.maxTurns) { this.showToast('Bạn đã hết lượt!', 'error'); Sound.play('error'); return; }
-        this.currentRoom = r; this.currentPlayer = name;
-        // Remember player name for next visit
-        localStorage.setItem('lixi-last-name', name);
-        if (this.currentUser) await Storage.saveJoinedRoom(this.currentUser.uid, code, r.name, name);
-        if (r.mode === 'wheel') this.startWheelGame(); else if (r.mode === 'scratch') this.startScratchGame(); else this.startEnvelopeGame();
+        try {
+            const r = await Storage.getRoom(code);
+            if (!r) { this.showToast('Không tìm thấy phòng! Kiểm tra lại mã', 'error'); Sound.play('error'); return; }
+            if (!r.isOpen) { this.showToast('Phòng đã khoá', 'error'); Sound.play('error'); return; }
+            if (this.isRoomExpired(r)) { this.showToast('Phòng đã hết hạn!', 'error'); Sound.play('error'); return; }
+            const alreadyIn = r.players.find(p => p.name === name);
+            if (!alreadyIn) {
+                r.players.push({ name, joinedAt: new Date().toISOString(), uid: this.currentUser ? this.currentUser.uid : null });
+                const saved = await Storage.saveRoom(code, r);
+                if (!saved) {
+                    this.showToast('Lỗi quyền truy cập. Vui lòng đăng nhập để chơi', 'error');
+                    Sound.play('error');
+                    return;
+                }
+            }
+            const tu = r.history.filter(h => h.playerName === name).length;
+            if (tu >= r.maxTurns) { this.showToast('Bạn đã hết lượt!', 'error'); Sound.play('error'); return; }
+            this.currentRoom = r; this.currentPlayer = name;
+            localStorage.setItem('lixi-last-name', name);
+            if (this.currentUser && !this.currentUser.isAnonymous) {
+                await Storage.saveJoinedRoom(this.currentUser.uid, code, r.name, name);
+            }
+            if (r.mode === 'wheel') this.startWheelGame();
+            else if (r.mode === 'scratch') this.startScratchGame();
+            else this.startEnvelopeGame();
+        } finally {
+            if (btn) { btn.disabled = false; btn.textContent = '🚪 Vào phòng'; }
+        }
     },
 
     // ==================== GAMES ====================
@@ -1260,7 +1300,9 @@ const App = {
             const pi = r.prizes.findIndex(p => p.name === prize.name);
             if (pi !== -1) r.prizes.splice(pi, 1);
         }
-        await Storage.saveRoom(r.code, r); this.currentRoom = r;
+        const saved = await Storage.saveRoom(r.code, r);
+        if (!saved) { this.showToast('Lỗi lưu kết quả. Kết quả không được ghi lại!', 'error'); return; }
+        this.currentRoom = r;
         if (this.currentUser) await Storage.saveWin(this.currentUser.uid, r.code, r.name, this.currentPlayer, prize.name, prize.value === -1 ? 0 : (prize.value || 0));
         const $ = id => document.getElementById(id), big = (prize.value || 0) >= 100000, luck = prize.value === 0 && prize.name.toLowerCase().includes('may man'), extra = prize.value === -1;
         if (luck) { $('result-emoji').textContent = '🍀'; $('result-title').textContent = 'Chúc may mắn!'; $('result-prize').textContent = prize.name; $('result-message').textContent = 'Lần sau sẽ may mắn hơn!'; }
