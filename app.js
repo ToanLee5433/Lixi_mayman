@@ -56,9 +56,22 @@ const State = {
 };
 
 const Sound = {
-    ctx: null, init() { if (!this.ctx) this.ctx = new (window.AudioContext || window.webkitAudioContext)(); },
+    ctx: null,
+    init() {
+        if (!this.ctx) {
+            try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return false; }
+        }
+        if (this.ctx.state === 'suspended') { this.ctx.resume(); }
+        return true;
+    },
+    primeOnGesture() {
+        const resume = () => { if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume(); };
+        document.addEventListener('click', resume, { once: false });
+        document.addEventListener('touchstart', resume, { once: false });
+    },
     play(type) {
-        this.init(); const c = this.ctx, n = c.currentTime;
+        if (!this.init()) return;
+        const c = this.ctx, n = c.currentTime;
         if (type === 'click') { const o = c.createOscillator(), g = c.createGain(); o.connect(g).connect(c.destination); o.frequency.setValueAtTime(800, n); o.frequency.exponentialRampToValueAtTime(1200, n + 0.05); g.gain.setValueAtTime(0.15, n); g.gain.exponentialRampToValueAtTime(0.001, n + 0.1); o.start(n); o.stop(n + 0.1); }
         else if (type === 'spin') { const o = c.createOscillator(), g = c.createGain(); o.type = 'sawtooth'; o.connect(g).connect(c.destination); o.frequency.setValueAtTime(200, n); o.frequency.linearRampToValueAtTime(800, n + 0.5); o.frequency.linearRampToValueAtTime(100, n + 3); g.gain.setValueAtTime(0.08, n); g.gain.linearRampToValueAtTime(0.03, n + 2); g.gain.exponentialRampToValueAtTime(0.001, n + 3.5); o.start(n); o.stop(n + 3.5); }
         else if (type === 'tick') { const o = c.createOscillator(), g = c.createGain(); o.type = 'square'; o.connect(g).connect(c.destination); o.frequency.setValueAtTime(1500, n); g.gain.setValueAtTime(0.06, n); g.gain.exponentialRampToValueAtTime(0.001, n + 0.03); o.start(n); o.stop(n + 0.03); }
@@ -287,6 +300,7 @@ const App = {
         this.initAuth();
         this.handleDeepLink();
         this.restorePreferences();
+        Sound.primeOnGesture();
     },
     handleDeepLink() {
         const p = new URLSearchParams(window.location.search);
