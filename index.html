@@ -31,11 +31,8 @@
     <div class="modal" id="qr-view-modal">
         <div class="modal-content glass-card" style="max-width:400px;text-align:center">
             <h3 class="section-title">🖼️ Ảnh QR Ngân Hàng</h3>
-            <div class="qr-view-container">
-                <img id="qr-view-img" src="" style="width:100%;border-radius:var(--radius-md);margin:15px 0">
-            </div>
-            <button class="btn btn-outline btn-block"
-                onclick="document.getElementById('qr-view-modal').classList.remove('active')">Đóng</button>
+            <div class="qr-view-container"></div>
+            <button class="btn btn-outline btn-block" id="btn-qr-view-close" style="margin-top:12px">✕ Đóng</button>
         </div>
     </div>
 
@@ -198,11 +195,29 @@
                     <div style="flex:1;min-width:130px">
                         <label style="font-size:0.8rem;color:var(--gold-300);margin-bottom:4px;display:block">🎵 Nhạc
                             nền</label>
-                        <select class="input-field" id="music-selector" style="font-size:0.85rem">
-                            <option value="music.mp3">🎵 Xuân truyền thống</option>
-                            <option value="music2.mp3">🎶 Jazz Tết</option>
-                            <option value="music3.mp3">🎼 Lofi chill</option>
-                        </select>
+                        <div class="music-picker" id="music-picker">
+                            <button class="music-picker-btn" id="music-picker-btn" type="button">
+                                <span class="music-picker-note">🎵</span>
+                                <span class="music-picker-display">
+                                    <span class="music-picker-text" id="music-picker-text">Một năm mới bình an - Sơn Tùng MTP</span>
+                                </span>
+                                <span class="music-picker-arrow" id="music-picker-arrow">▾</span>
+                            </button>
+                            <div class="music-picker-dropdown" id="music-picker-dropdown">
+                                <div class="music-option selected" data-src="music1.mp3">
+                                    <span class="music-opt-note">🎵</span>
+                                    <span class="music-opt-textbox"><span class="music-opt-inner">Một năm mới bình an - Sơn Tùng MTP</span></span>
+                                </div>
+                                <div class="music-option" data-src="music2.mp3">
+                                    <span class="music-opt-note">🎶</span>
+                                    <span class="music-opt-textbox"><span class="music-opt-inner">Như hoa mùa xuân - Hồ Ngọc Hà, Thuỷ Tiên, Minh Hằng</span></span>
+                                </div>
+                                <div class="music-option" data-src="music3.mp3">
+                                    <span class="music-opt-note">🎼</span>
+                                    <span class="music-opt-textbox"><span class="music-opt-inner">Ngày xuân long phượng xum vầy - Bích Phương</span></span>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -406,6 +421,7 @@
                     <button class="tab active" id="dtab-btn-players">👥 Người chơi</button>
                     <button class="tab" id="dtab-btn-leaderboard">🏆 Xếp hạng</button>
                     <button class="tab" id="dtab-btn-history">📜 Lịch sử</button>
+                    <button class="tab" id="dtab-btn-payment">💳 Thanh toán</button>
                     <button class="tab" id="dtab-btn-settings">⚙️ Cài đặt</button>
                 </div>
 
@@ -458,7 +474,13 @@
                         </div>
                         <button class="btn btn-outline btn-block btn-sm" id="btn-export-csv" style="margin-top:12px">📥
                             Xuất CSV</button>
-                        <div id="bank-info-viewer" style="margin-top:16px"></div>
+                    </div>
+                </div>
+
+                <!-- TAB: PAYMENT INFO -->
+                <div class="tab-content" id="tab-payment">
+                    <div class="scroll-area">
+                        <div id="bank-info-viewer"></div>
                     </div>
                 </div>
 
@@ -576,7 +598,7 @@
                 </div>
                 <div class="input-group">
                     <label>🔑 Mã phòng</label>
-                    <input class="input-field" id="player-room-code" type="text" placeholder="Nhập mã 6 số..."
+                    <input class="input-field" id="player-room-code" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="Nhập mã 6 số..."
                         maxlength="6" style="text-align:center; font-size:1.5rem; letter-spacing:8px; font-weight:700">
                 </div>
                 <button class="btn btn-gold btn-block btn-lg mt-md" id="btn-join-room">🚪 Vào Phòng</button>
@@ -639,13 +661,16 @@
         <!-- Scratch Overlay (zoomed card) -->
         <div class="scratch-overlay" id="scratch-overlay">
             <div class="scratch-overlay-card">
-                <div class="scratch-overlay-header">🎫 Cào để lộ giải thưởng!</div>
+                <div class="scratch-overlay-header">🎫 Thẻ Cào May Mắn</div>
+                <p class="scratch-overlay-subtitle">Cào lớp phủ để lộ giải thưởng của bạn</p>
                 <div class="scratch-stage">
-                    <canvas id="scratchCanvas" width="320" height="220"></canvas>
-                    <div class="scratch-prize" id="scratch-prize-text">?</div>
+                    <canvas id="scratchCanvas" width="320" height="200"></canvas>
+                    <div class="scratch-prize" id="scratch-prize-text"></div>
                 </div>
-                <p class="text-muted text-center" style="font-size:0.8rem;margin-top:12px">Dùng ngón tay hoặc chuột cào
-                    lớp phủ</p>
+                <div class="scratch-hint">
+                    <span class="scratch-hint-icon">👆</span>
+                    <span class="scratch-hint-text">Dùng ngón tay hoặc chuột để cào</span>
+                </div>
             </div>
         </div>
 
@@ -662,8 +687,14 @@
                 <!-- Bank Info Section -->
                 <div class="bank-info-section" id="bank-info-section" style="display:none">
                     <div class="bank-info-header">🏦 Gửi thông tin nhận thưởng</div>
-                    <p class="text-muted" style="font-size:0.8rem;margin-bottom:12px">Để chủ phòng chuyển thưởng cho bạn
+                    <p class="text-muted" style="font-size:0.8rem;margin-bottom:10px">Để chủ phòng chuyển thưởng cho bạn
                         sau khi phòng kết thúc</p>
+
+                    <div class="bank-info-hint" id="bank-info-hint">
+                        <span class="bank-hint-option">📋 Điền đủ 3 thông tin</span>
+                        <span class="bank-hint-or">hoặc</span>
+                        <span class="bank-hint-option">📸 Chỉ cần ảnh QR</span>
+                    </div>
 
                     <div class="bank-form-grid">
                         <div class="input-group">
@@ -705,7 +736,7 @@
     </div>
 
     <audio id="bgMusic" loop preload="auto">
-        <source src="music.mp3" type="audio/mpeg">
+        <source src="music1.mp3" type="audio/mpeg">
     </audio>
 
     <!-- Firebase SDK -->

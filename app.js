@@ -127,16 +127,23 @@ const ScratchCard = {
     renderGrid() {
         const grid = document.getElementById('scratch-grid');
         grid.innerHTML = '';
+        const labels = ['MAY MẮN','PHÁT TÀI','VẠN SỰ','XUÂN VỀ','BÌNH AN','TÀI LỘC','AN KHANG','THỊNH VƯỢNG','HỶ SỰ'];
         for (let i = 0; i < 9; i++) {
             const card = document.createElement('div');
             card.className = 'scratch-card-item';
             card.dataset.index = i;
-            // Uniform red card with gold 福 (Fortune) symbol
             card.innerHTML = `
-                <div class="scratch-card-face">
-                    <div class="scratch-card-pattern"></div>
-                    <span class="scratch-card-icon" style="color:#fbbf24;font-size:3.5rem;font-family:'Outfit',sans-serif">福</span>
-                    <span class="scratch-card-label">Thẻ #${i + 1}</span>
+                <div class="scratch-ticket">
+                    <div class="ticket-top">
+                        <span class="ticket-brand">LÌ XÌ</span>
+                        <span class="ticket-stars">★ ★ ★</span>
+                    </div>
+                    <div class="ticket-main">
+                        <div class="ticket-seal">福</div>
+                    </div>
+                    <div class="ticket-bottom">
+                        <span class="ticket-num">${labels[i]}</span>
+                    </div>
                 </div>`;
             card.addEventListener('click', () => this.selectCard(i));
             grid.appendChild(card);
@@ -159,32 +166,44 @@ const ScratchCard = {
         this.revealed = false;
         document.getElementById('scratch-prize-text').textContent = this.prize.name;
 
-        // Setup initial scratch layer
-        this.ctx.globalCompositeOperation = 'source-over';
-        const g = this.ctx.createLinearGradient(0, 0, 320, 220);
-        g.addColorStop(0, '#c92a2a'); g.addColorStop(0.5, '#e03131'); g.addColorStop(1, '#b91c1c');
-        this.ctx.fillStyle = g; this.ctx.fillRect(0, 0, 320, 220);
+        const W = 320, H = 200;
 
-        // Add decorative patterns to layer
-        this.ctx.fillStyle = 'rgba(251,191,36,0.15)';
-        for (let i = 0; i < 12; i++) {
+        // Premium scratch layer — dark gradient with gold accents
+        this.ctx.globalCompositeOperation = 'source-over';
+        const g = this.ctx.createLinearGradient(0, 0, W, H);
+        g.addColorStop(0, '#2d0a0a'); g.addColorStop(0.5, '#8b0000'); g.addColorStop(1, '#1a0505');
+        this.ctx.fillStyle = g; this.ctx.fillRect(0, 0, W, H);
+
+        // Gold foil diagonal stripes
+        this.ctx.fillStyle = 'rgba(251,191,36,0.07)';
+        for (let x = -H; x < W + H; x += 32) {
             this.ctx.beginPath();
-            this.ctx.arc(Math.random() * 320, Math.random() * 220, 20 + Math.random() * 30, 0, Math.PI * 2);
-            this.ctx.fill();
+            this.ctx.moveTo(x, 0); this.ctx.lineTo(x + H, H);
+            this.ctx.lineWidth = 14; this.ctx.strokeStyle = 'rgba(251,191,36,0.07)';
+            this.ctx.stroke();
         }
 
+        // Central gold seal on scratch layer
+        this.ctx.beginPath();
+        this.ctx.arc(W / 2, H / 2, 36, 0, Math.PI * 2);
+        const sg = this.ctx.createRadialGradient(W/2 - 8, H/2 - 8, 0, W/2, H/2, 36);
+        sg.addColorStop(0, 'rgba(255,215,0,0.35)');
+        sg.addColorStop(1, 'rgba(200,150,0,0.12)');
+        this.ctx.fillStyle = sg; this.ctx.fill();
+
+        // Text on top of scratch layer
         this.ctx.fillStyle = '#fbbf24';
-        this.ctx.font = 'bold 26px Outfit,sans-serif';
+        this.ctx.font = 'bold 20px Outfit,sans-serif';
         this.ctx.textAlign = 'center';
-        this.ctx.fillText('✨ Cào tại đây ✨', 160, 100);
-        this.ctx.font = '14px Outfit,sans-serif';
-        this.ctx.fillStyle = 'rgba(255,215,0,0.8)';
-        this.ctx.fillText('Khám phá quà tặng may mắn', 160, 130);
+        this.ctx.fillText('✨ CÀO ĐỂ MỞ ✨', W / 2, H / 2 - 8);
+        this.ctx.font = '500 13px Outfit,sans-serif';
+        this.ctx.fillStyle = 'rgba(255,215,0,0.7)';
+        this.ctx.fillText('Chà ngón tay lên đây nào!', W / 2, H / 2 + 16);
 
         this.ctx.globalCompositeOperation = 'destination-out';
         this.ctx.lineJoin = 'round';
         this.ctx.lineCap = 'round';
-        this.ctx.lineWidth = 45;
+        this.ctx.lineWidth = 50;
 
         let lastX = null, lastY = null;
         let drawing = false;
@@ -205,9 +224,8 @@ const ScratchCard = {
             e.preventDefault();
             const r = this.canvas.getBoundingClientRect();
             const touch = e.touches ? e.touches[0] : e;
-            const x = (touch.clientX - r.left) * (320 / r.width);
-            const y = (touch.clientY - r.top) * (220 / r.height);
-
+            const x = (touch.clientX - r.left) * (W / r.width);
+            const y = (touch.clientY - r.top) * (H / r.height);
             requestAnimationFrame(() => draw(x, y));
         };
 
@@ -219,7 +237,8 @@ const ScratchCard = {
             onMove(e);
         };
         this.canvas.onmousemove = this.canvas.ontouchmove = onMove;
-        this.canvas.onmouseup = this.canvas.ontouchend = () => {
+        this.canvas.onmouseup = this.canvas.ontouchend =
+        this.canvas.onmouseleave = this.canvas.ontouchcancel = () => {
             this.scratching = false;
             drawing = false;
         };
@@ -227,14 +246,19 @@ const ScratchCard = {
     init(prize) { this.prize = prize; this.revealed = false; this.renderGrid(); },
     checkReveal() {
         if (this.revealed) return;
-        const d = this.ctx.getImageData(0, 0, 320, 220).data; let t = 0, c = 0;
-        for (let i = 3; i < d.length; i += 16) { t++; if (d[i] === 0) c++; }
-        if (c / t > 0.5) {
-            this.revealed = true; this.ctx.clearRect(0, 0, 320, 220); Sound.play('win');
+        // Sample only the center zone (x:60-260, y:20-140) where the prize text is displayed.
+        // Reveal as soon as 35% of that zone is scratched — so the number is "nearly visible".
+        const d = this.ctx.getImageData(60, 20, 200, 120).data;
+        let t = 0, c = 0;
+        for (let i = 3; i < d.length; i += 4) { t++; if (d[i] < 128) c++; }
+        if (c / t > 0.35) {
+            this.revealed = true;
+            this.ctx.clearRect(0, 0, 320, 200); // auto-wipe remaining scratch layer
+            Sound.play('win');
             setTimeout(() => {
                 document.getElementById('scratch-overlay').classList.remove('active');
                 App.handlePrizeWon(this.prize);
-            }, 800);
+            }, 900);
         }
     },
     reset() {
@@ -261,7 +285,6 @@ const App = {
         this.initMusic();
         this.bindEvents();
         this.initAuth();
-        this.restoreState();
         this.handleDeepLink();
         this.restorePreferences();
     },
@@ -278,21 +301,6 @@ const App = {
         if (!r.timerHours || r.timerHours === 0) return false;
         const created = new Date(r.createdAt).getTime();
         return Date.now() > created + r.timerHours * 3600000;
-    },
-    async restoreState() {
-        const s = State.load();
-        if (s && s.code) {
-            const r = await Storage.getRoom(s.code);
-            if (r) {
-                this.currentRoom = r;
-                if (s.player) {
-                    this.currentPlayer = s.player;
-                    if (r.mode === 'wheel') this.startWheelGame(); else if (r.mode === 'scratch') this.startScratchGame(); else this.startEnvelopeGame();
-                } else {
-                    this.showDashboard();
-                }
-            } else { State.clear(); }
-        }
     },
 
     // ==================== BIND ALL EVENTS ====================
@@ -317,6 +325,12 @@ const App = {
             $('qr-preview-wrapper').style.display = 'none';
             $('qr-upload-label').style.display = 'flex';
             this._uploadedQR = null;
+            this.updateBankHint();
+        });
+
+        // Bank info live validation hint
+        ['bank-name', 'bank-account', 'bank-holder'].forEach(id => {
+            const el = $(id); if (el) el.addEventListener('input', () => this.updateBankHint());
         });
 
         // Password live check
@@ -333,13 +347,47 @@ const App = {
         // Theme + Music
         const themeEl = document.getElementById('theme-selector');
         if (themeEl) themeEl.addEventListener('change', () => this.applyTheme(themeEl.value));
-        const musicEl = document.getElementById('music-selector');
-        if (musicEl) musicEl.addEventListener('change', () => this.changeMusic(musicEl.value));
+
+        // Custom music picker
+        const pickerBtn = document.getElementById('music-picker-btn');
+        if (pickerBtn) {
+            pickerBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const dd = document.getElementById('music-picker-dropdown');
+                const arrow = document.getElementById('music-picker-arrow');
+                const open = dd.classList.toggle('open');
+                arrow.classList.toggle('rotated', open);
+            });
+            const display = pickerBtn.querySelector('.music-picker-display');
+            const textEl = document.getElementById('music-picker-text');
+            pickerBtn.addEventListener('mouseenter', () => this._startMarquee(textEl, display));
+            pickerBtn.addEventListener('mouseleave', () => this._stopMarquee(textEl));
+        }
+        document.querySelectorAll('.music-option').forEach(opt => {
+            const inner = opt.querySelector('.music-opt-inner');
+            const box = opt.querySelector('.music-opt-textbox');
+            opt.addEventListener('click', () => {
+                this.changeMusic(opt.dataset.src);
+                document.getElementById('music-picker-dropdown').classList.remove('open');
+                document.getElementById('music-picker-arrow').classList.remove('rotated');
+            });
+            opt.addEventListener('mouseenter', () => this._startMarquee(inner, box));
+            opt.addEventListener('mouseleave', () => this._stopMarquee(inner));
+        });
+        document.getElementById('music-picker')?.addEventListener('click', e => e.stopPropagation());
+        document.addEventListener('click', () => {
+            const dd = document.getElementById('music-picker-dropdown');
+            if (dd && dd.classList.contains('open')) {
+                dd.classList.remove('open');
+                const arr = document.getElementById('music-picker-arrow');
+                if (arr) arr.classList.remove('rotated');
+            }
+        });
 
         // History
         on('back-history', () => this.showScreen('screen-home'));
-        on('htab-btn-created', () => this.switchHistoryTab('htab-my-rooms', $('htab-btn-created')));
-        on('htab-btn-joined', () => this.switchHistoryTab('htab-joined', $('htab-btn-joined')));
+        on('htab-btn-created', () => this.switchTab('htab-my-rooms', $('htab-btn-created')));
+        on('htab-btn-joined', () => this.switchTab('htab-joined', $('htab-btn-joined')));
 
         // Host create
         on('back-host-create', () => this.showScreen('screen-home'));
@@ -359,6 +407,7 @@ const App = {
         on('dtab-btn-players', () => this.switchTab('tab-players', $('dtab-btn-players')));
         on('dtab-btn-leaderboard', () => this.switchTab('tab-leaderboard', $('dtab-btn-leaderboard')));
         on('dtab-btn-history', () => this.switchTab('tab-history', $('dtab-btn-history')));
+        on('dtab-btn-payment', () => this.switchTab('tab-payment', $('dtab-btn-payment')));
         on('dtab-btn-settings', () => this.switchTab('tab-settings', $('dtab-btn-settings')));
         on('btn-toggle-room', () => this.toggleRoom());
         on('btn-reset-room', () => this.resetRoom());
@@ -388,8 +437,38 @@ const App = {
         on('btn-leave-result', () => this.leaveGame());
         on('btn-send-bank-info', () => this.sendBankInfo());
 
+        // Room code: digits only
+        const codeInput = $('player-room-code');
+        if (codeInput) {
+            codeInput.addEventListener('input', () => {
+                const clean = codeInput.value.replace(/\D/g, '').slice(0, 6);
+                if (codeInput.value !== clean) codeInput.value = clean;
+            });
+            codeInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') this.joinRoom();
+            });
+        }
+
         // QR modal close on overlay click
         document.getElementById('qr-modal').addEventListener('click', (e) => { if (e.target.id === 'qr-modal') e.target.classList.remove('active'); });
+        // QR view modal: close on overlay click or close button
+        const qrViewModal = document.getElementById('qr-view-modal');
+        if (qrViewModal) {
+            qrViewModal.addEventListener('click', (e) => { if (e.target === qrViewModal) qrViewModal.classList.remove('active'); });
+            const closeBtn = document.getElementById('btn-qr-view-close');
+            if (closeBtn) closeBtn.addEventListener('click', () => qrViewModal.classList.remove('active'));
+        }
+        // Escape key closes all modals and music picker
+        document.addEventListener('keydown', (e) => {
+            if (e.key !== 'Escape') return;
+            document.getElementById('qr-modal')?.classList.remove('active');
+            document.getElementById('qr-view-modal')?.classList.remove('active');
+            const dd = document.getElementById('music-picker-dropdown');
+            if (dd && dd.classList.contains('open')) {
+                dd.classList.remove('open');
+                document.getElementById('music-picker-arrow')?.classList.remove('rotated');
+            }
+        });
     },
 
     // ==================== AUTH ====================
@@ -466,7 +545,8 @@ const App = {
             if (!el) return;
             const label = el.textContent.replace(/^[✓✗]\s*/, '');
             el.textContent = (c.ok ? '✓ ' : '✗ ') + label;
-            el.style.color = c.ok ? '#22c55e' : '#ef4444';
+            el.classList.toggle('valid', c.ok);
+            el.style.color = '';
         });
     },
 
@@ -488,11 +568,11 @@ const App = {
     async loginEmail() {
         const email = document.getElementById('login-email').value.trim();
         const pw = document.getElementById('login-password').value;
-        if (!email || !pw) { this.showToast('Vui lòng nhập email và mật khẩu'); Sound.play('error'); return; }
+        if (!email || !pw) { this.showToast('Vui lòng nhập email và mật khẩu', 'error'); Sound.play('error'); return; }
         const btn = document.getElementById('btn-login');
         btn.disabled = true; btn.textContent = '⏳ Đang đăng nhập...';
         try { await auth.signInWithEmailAndPassword(email, pw); Sound.play('win'); }
-        catch (e) { this.showToast(this.getAuthErrorMessage(e.code)); Sound.play('error'); }
+        catch (e) { this.showToast(this.getAuthErrorMessage(e.code), 'error'); Sound.play('error'); }
         finally { btn.disabled = false; btn.textContent = '🔑 Đăng nhập'; }
     },
 
@@ -500,15 +580,15 @@ const App = {
         const name = document.getElementById('register-name').value.trim();
         const email = document.getElementById('register-email').value.trim();
         const pw = document.getElementById('register-password').value;
-        if (!name) { this.showToast('Vui lòng nhập tên'); Sound.play('error'); return; }
-        if (!email) { this.showToast('Vui lòng nhập email'); Sound.play('error'); return; }
-        if (!pw) { this.showToast('Vui lòng nhập mật khẩu'); Sound.play('error'); return; }
+        if (!name) { this.showToast('Vui lòng nhập tên', 'error'); Sound.play('error'); return; }
+        if (!email) { this.showToast('Vui lòng nhập email', 'error'); Sound.play('error'); return; }
+        if (!pw) { this.showToast('Vui lòng nhập mật khẩu', 'error'); Sound.play('error'); return; }
         const err = this.validatePassword(pw);
-        if (err) { this.showToast(err); Sound.play('error'); return; }
+        if (err) { this.showToast(err, 'error'); Sound.play('error'); return; }
         const btn = document.getElementById('btn-register');
         btn.disabled = true; btn.textContent = '⏳ Đang tạo tài khoản...';
-        try { const c = await auth.createUserWithEmailAndPassword(email, pw); await c.user.updateProfile({ displayName: name }); Sound.play('bigwin'); this.showToast('Chào mừng ' + name + '! 🎉'); }
-        catch (e) { this.showToast(this.getAuthErrorMessage(e.code)); Sound.play('error'); }
+        try { const c = await auth.createUserWithEmailAndPassword(email, pw); await c.user.updateProfile({ displayName: name }); Sound.play('bigwin'); this.showToast('Chào mừng ' + name + '! 🎉', 'success'); }
+        catch (e) { this.showToast(this.getAuthErrorMessage(e.code), 'error'); Sound.play('error'); }
         finally { btn.disabled = false; btn.textContent = '📝 Tạo tài khoản'; }
     },
 
@@ -517,7 +597,7 @@ const App = {
         const btn = document.getElementById('btn-google');
         btn.disabled = true;
         try { await auth.signInWithPopup(provider); Sound.play('win'); }
-        catch (e) { if (e.code !== 'auth/popup-closed-by-user') { this.showToast(this.getAuthErrorMessage(e.code)); Sound.play('error'); } }
+        catch (e) { if (e.code !== 'auth/popup-closed-by-user') { this.showToast(this.getAuthErrorMessage(e.code), 'error'); Sound.play('error'); } }
         finally { btn.disabled = false; }
     },
 
@@ -547,52 +627,52 @@ const App = {
                 '--glow-primary': '251,191,36', '--glow-accent': '224,49,49', '--btn-gold-text': '#1a0505'
             },
             jade: {
-                '--red-50': '#ecfdf5', '--red-100': '#d1fae5', '--red-200': '#a7f3d0', '--red-300': '#6ee7b7', '--red-400': '#34d399', '--red-500': '#10b981', '--red-600': '#059669', '--red-700': '#047857', '--red-800': '#065f46', '--red-900': '#064e3b',
+                '--red-50': '#f0fdf4', '--red-100': '#dcfce7', '--red-200': '#bbf7d0', '--red-300': '#86efac', '--red-400': '#4ade80', '--red-500': '#22c55e', '--red-600': '#16a34a', '--red-700': '#15803d', '--red-800': '#166534', '--red-900': '#14532d',
                 '--gold-50': '#ecfdf5', '--gold-100': '#d1fae5', '--gold-200': '#a7f3d0', '--gold-300': '#6ee7b7', '--gold-400': '#34d399', '--gold-500': '#10b981', '--gold-600': '#059669', '--gold-700': '#047857',
-                '--bg-primary': '#021a12', '--bg-card': 'rgba(0,100,60,0.2)', '--bg-glass': 'rgba(200,255,230,0.06)', '--bg-glass-strong': 'rgba(200,255,230,0.12)',
-                '--text-primary': '#ecfdf5', '--text-secondary': '#6ee7b7', '--text-muted': 'rgba(236,253,245,0.55)',
-                '--border-glow': 'rgba(52,211,153,0.35)', '--shadow-gold': '0 0 30px rgba(52,211,153,0.2)', '--shadow-red': '0 0 30px rgba(16,185,129,0.3)',
-                '--gradient-bg': 'radial-gradient(ellipse at top,#0a2e1f 0%,#021a12 50%,#010d09 100%)',
-                '--gradient-red': 'linear-gradient(135deg,#10b981,#059669)', '--gradient-gold': 'linear-gradient(135deg,#34d399,#10b981,#059669)',
-                '--gradient-card': 'linear-gradient(145deg,rgba(16,185,129,0.2),rgba(0,100,60,0.1))',
-                '--gradient-button': 'linear-gradient(135deg,#34d399,#10b981)', '--gradient-button-red': 'linear-gradient(135deg,#10b981,#059669)',
-                '--glow-primary': '52,211,153', '--glow-accent': '16,185,129', '--btn-gold-text': '#021a12'
+                '--bg-primary': '#022c22', '--bg-card': 'rgba(6, 78, 59, 0.4)', '--bg-glass': 'rgba(209, 250, 229, 0.05)', '--bg-glass-strong': 'rgba(209, 250, 229, 0.1)',
+                '--text-primary': '#ecfdf5', '--text-secondary': '#6ee7b7', '--text-muted': 'rgba(236,253,245,0.6)',
+                '--border-glow': 'rgba(52,211,153,0.4)', '--shadow-gold': '0 0 30px rgba(52,211,153,0.15)', '--shadow-red': '0 0 30px rgba(16,185,129,0.25)',
+                '--gradient-bg': 'radial-gradient(ellipse at top, #064e3b 0%, #022c22 60%, #061e16 100%)',
+                '--gradient-red': 'linear-gradient(135deg, #15803d, #14532d)', '--gradient-gold': 'linear-gradient(135deg, #4ade80, #22c55e, #16a34a)',
+                '--gradient-card': 'linear-gradient(145deg, rgba(6, 78, 59, 0.6), rgba(2, 44, 34, 0.4))',
+                '--gradient-button': 'linear-gradient(135deg, #4ade80, #22c55e)', '--gradient-button-red': 'linear-gradient(135deg, #ef4444, #dc2626)',
+                '--glow-primary': '74, 222, 128', '--glow-accent': '34, 197, 94', '--btn-gold-text': '#022c22'
             },
             sakura: {
-                '--red-50': '#fdf2f8', '--red-100': '#fce7f3', '--red-200': '#fbcfe8', '--red-300': '#f9a8d4', '--red-400': '#f472b6', '--red-500': '#ec4899', '--red-600': '#db2777', '--red-700': '#be185d', '--red-800': '#9d174d', '--red-900': '#831843',
+                '--red-50': '#fff1f2', '--red-100': '#ffe4e6', '--red-200': '#fecdd3', '--red-300': '#fda4af', '--red-400': '#fb7185', '--red-500': '#f43f5e', '--red-600': '#e11d48', '--red-700': '#be123c', '--red-800': '#9f1239', '--red-900': '#881337',
                 '--gold-50': '#fdf2f8', '--gold-100': '#fce7f3', '--gold-200': '#fbcfe8', '--gold-300': '#f9a8d4', '--gold-400': '#f472b6', '--gold-500': '#ec4899', '--gold-600': '#db2777', '--gold-700': '#be185d',
-                '--bg-primary': '#1a0a14', '--bg-card': 'rgba(150,0,80,0.2)', '--bg-glass': 'rgba(255,200,230,0.06)', '--bg-glass-strong': 'rgba(255,200,230,0.12)',
-                '--text-primary': '#fdf2f8', '--text-secondary': '#f9a8d4', '--text-muted': 'rgba(253,242,248,0.55)',
-                '--border-glow': 'rgba(244,114,182,0.35)', '--shadow-gold': '0 0 30px rgba(244,114,182,0.2)', '--shadow-red': '0 0 30px rgba(236,72,153,0.3)',
-                '--gradient-bg': 'radial-gradient(ellipse at top,#3d0c28 0%,#1a0a14 50%,#0d050a 100%)',
-                '--gradient-red': 'linear-gradient(135deg,#ec4899,#db2777)', '--gradient-gold': 'linear-gradient(135deg,#f472b6,#ec4899,#db2777)',
-                '--gradient-card': 'linear-gradient(145deg,rgba(236,72,153,0.2),rgba(150,0,80,0.1))',
-                '--gradient-button': 'linear-gradient(135deg,#f472b6,#ec4899)', '--gradient-button-red': 'linear-gradient(135deg,#ec4899,#db2777)',
-                '--glow-primary': '244,114,182', '--glow-accent': '236,72,153', '--btn-gold-text': '#1a0a14'
+                '--bg-primary': '#2e0b16', '--bg-card': 'rgba(131, 24, 67, 0.3)', '--bg-glass': 'rgba(255, 228, 230, 0.05)', '--bg-glass-strong': 'rgba(255, 228, 230, 0.1)',
+                '--text-primary': '#fff1f2', '--text-secondary': '#fda4af', '--text-muted': 'rgba(255, 241, 242, 0.6)',
+                '--border-glow': 'rgba(251, 113, 133, 0.4)', '--shadow-gold': '0 0 30px rgba(251, 113, 133, 0.2)', '--shadow-red': '0 0 30px rgba(225, 29, 72, 0.3)',
+                '--gradient-bg': 'radial-gradient(ellipse at top, #831843 0%, #500724 50%, #2e0b16 100%)',
+                '--gradient-red': 'linear-gradient(135deg, #be123c, #9f1239)', '--gradient-gold': 'linear-gradient(135deg, #fb7185, #f43f5e, #e11d48)',
+                '--gradient-card': 'linear-gradient(145deg, rgba(159, 18, 57, 0.4), rgba(131, 24, 67, 0.2))',
+                '--gradient-button': 'linear-gradient(135deg, #fb7185, #f43f5e)', '--gradient-button-red': 'linear-gradient(135deg, #be123c, #9f1239)',
+                '--glow-primary': '251, 113, 133', '--glow-accent': '244, 63, 94', '--btn-gold-text': '#2e0b16'
             },
             royal: {
-                '--red-50': '#f5f3ff', '--red-100': '#ede9fe', '--red-200': '#ddd6fe', '--red-300': '#c4b5fd', '--red-400': '#a78bfa', '--red-500': '#8b5cf6', '--red-600': '#7c3aed', '--red-700': '#6d28d9', '--red-800': '#5b21b6', '--red-900': '#4c1d95',
-                '--gold-50': '#f5f3ff', '--gold-100': '#ede9fe', '--gold-200': '#ddd6fe', '--gold-300': '#c4b5fd', '--gold-400': '#a78bfa', '--gold-500': '#8b5cf6', '--gold-600': '#7c3aed', '--gold-700': '#6d28d9',
-                '--bg-primary': '#0c0820', '--bg-card': 'rgba(80,0,180,0.18)', '--bg-glass': 'rgba(200,180,255,0.06)', '--bg-glass-strong': 'rgba(200,180,255,0.12)',
-                '--text-primary': '#f5f3ff', '--text-secondary': '#c4b5fd', '--text-muted': 'rgba(245,243,255,0.55)',
-                '--border-glow': 'rgba(167,139,250,0.35)', '--shadow-gold': '0 0 30px rgba(167,139,250,0.2)', '--shadow-red': '0 0 30px rgba(139,92,246,0.3)',
-                '--gradient-bg': 'radial-gradient(ellipse at top,#1e1050 0%,#0c0820 50%,#06040f 100%)',
-                '--gradient-red': 'linear-gradient(135deg,#8b5cf6,#7c3aed)', '--gradient-gold': 'linear-gradient(135deg,#a78bfa,#8b5cf6,#7c3aed)',
-                '--gradient-card': 'linear-gradient(145deg,rgba(139,92,246,0.2),rgba(80,0,180,0.1))',
-                '--gradient-button': 'linear-gradient(135deg,#a78bfa,#8b5cf6)', '--gradient-button-red': 'linear-gradient(135deg,#8b5cf6,#7c3aed)',
-                '--glow-primary': '167,139,250', '--glow-accent': '139,92,246', '--btn-gold-text': '#0c0820'
+                '--red-50': '#faf5ff', '--red-100': '#f3e8ff', '--red-200': '#e9d5ff', '--red-300': '#d8b4fe', '--red-400': '#c084fc', '--red-500': '#a855f7', '--red-600': '#9333ea', '--red-700': '#7e22ce', '--red-800': '#6b21a8', '--red-900': '#581c87',
+                '--gold-50': '#fffbeb', '--gold-100': '#fef3c7', '--gold-200': '#fde68a', '--gold-300': '#fcd34d', '--gold-400': '#fbbf24', '--gold-500': '#f59e0b', '--gold-600': '#d97706', '--gold-700': '#b45309',
+                '--bg-primary': '#190a2e', '--bg-card': 'rgba(88, 28, 135, 0.35)', '--bg-glass': 'rgba(233, 213, 255, 0.05)', '--bg-glass-strong': 'rgba(233, 213, 255, 0.1)',
+                '--text-primary': '#faf5ff', '--text-secondary': '#fcd34d', '--text-muted': 'rgba(250, 245, 255, 0.6)',
+                '--border-glow': 'rgba(251, 191, 36, 0.4)', '--shadow-gold': '0 0 35px rgba(251, 191, 36, 0.25)', '--shadow-red': '0 0 35px rgba(147, 51, 234, 0.3)',
+                '--gradient-bg': 'radial-gradient(ellipse at top, #4c1d95 0%, #2e1065 50%, #170a2b 100%)',
+                '--gradient-red': 'linear-gradient(135deg, #7e22ce, #6b21a8)', '--gradient-gold': 'linear-gradient(135deg, #fbbf24, #f59e0b, #d97706)',
+                '--gradient-card': 'linear-gradient(145deg, rgba(107, 33, 168, 0.4), rgba(88, 28, 135, 0.2))',
+                '--gradient-button': 'linear-gradient(135deg, #fbbf24, #f59e0b)', '--gradient-button-red': 'linear-gradient(135deg, #9333ea, #7e22ce)',
+                '--glow-primary': '251, 191, 36', '--glow-accent': '147, 51, 234', '--btn-gold-text': '#190a2e'
             },
             midnight: {
-                '--red-50': '#eff6ff', '--red-100': '#dbeafe', '--red-200': '#bfdbfe', '--red-300': '#93c5fd', '--red-400': '#60a5fa', '--red-500': '#3b82f6', '--red-600': '#2563eb', '--red-700': '#1d4ed8', '--red-800': '#1e40af', '--red-900': '#1e3a8a',
-                '--gold-50': '#eff6ff', '--gold-100': '#dbeafe', '--gold-200': '#bfdbfe', '--gold-300': '#93c5fd', '--gold-400': '#60a5fa', '--gold-500': '#3b82f6', '--gold-600': '#2563eb', '--gold-700': '#1d4ed8',
-                '--bg-primary': '#080e1e', '--bg-card': 'rgba(0,40,120,0.2)', '--bg-glass': 'rgba(180,210,255,0.06)', '--bg-glass-strong': 'rgba(180,210,255,0.12)',
-                '--text-primary': '#eff6ff', '--text-secondary': '#93c5fd', '--text-muted': 'rgba(239,246,255,0.55)',
-                '--border-glow': 'rgba(96,165,250,0.35)', '--shadow-gold': '0 0 30px rgba(96,165,250,0.2)', '--shadow-red': '0 0 30px rgba(59,130,246,0.3)',
-                '--gradient-bg': 'radial-gradient(ellipse at top,#0f1b3d 0%,#080e1e 50%,#04070f 100%)',
-                '--gradient-red': 'linear-gradient(135deg,#3b82f6,#2563eb)', '--gradient-gold': 'linear-gradient(135deg,#60a5fa,#3b82f6,#2563eb)',
-                '--gradient-card': 'linear-gradient(145deg,rgba(59,130,246,0.2),rgba(0,40,120,0.1))',
-                '--gradient-button': 'linear-gradient(135deg,#60a5fa,#3b82f6)', '--gradient-button-red': 'linear-gradient(135deg,#3b82f6,#2563eb)',
-                '--glow-primary': '96,165,250', '--glow-accent': '59,130,246', '--btn-gold-text': '#080e1e'
+                '--red-50': '#f0f9ff', '--red-100': '#e0f2fe', '--red-200': '#bae6fd', '--red-300': '#7dd3fc', '--red-400': '#38bdf8', '--red-500': '#0ea5e9', '--red-600': '#0284c7', '--red-700': '#0369a1', '--red-800': '#075985', '--red-900': '#0c4a6e',
+                '--gold-50': '#f0f9ff', '--gold-100': '#e0f2fe', '--gold-200': '#bae6fd', '--gold-300': '#7dd3fc', '--gold-400': '#38bdf8', '--gold-500': '#0ea5e9', '--gold-600': '#0284c7', '--gold-700': '#0369a1',
+                '--bg-primary': '#020617', '--bg-card': 'rgba(15, 23, 42, 0.6)', '--bg-glass': 'rgba(224, 242, 254, 0.05)', '--bg-glass-strong': 'rgba(224, 242, 254, 0.1)',
+                '--text-primary': '#f0f9ff', '--text-secondary': '#38bdf8', '--text-muted': 'rgba(240, 249, 255, 0.5)',
+                '--border-glow': 'rgba(56, 189, 248, 0.3)', '--shadow-gold': '0 0 40px rgba(14, 165, 233, 0.2)', '--shadow-red': '0 0 40px rgba(56, 189, 248, 0.15)',
+                '--gradient-bg': 'radial-gradient(ellipse at top, #0f172a 0%, #020617 70%, #000000 100%)',
+                '--gradient-red': 'linear-gradient(135deg, #0369a1, #075985)', '--gradient-gold': 'linear-gradient(135deg, #38bdf8, #0ea5e9, #0284c7)',
+                '--gradient-card': 'linear-gradient(145deg, rgba(30, 41, 59, 0.7), rgba(15, 23, 42, 0.5))',
+                '--gradient-button': 'linear-gradient(135deg, #38bdf8, #0ea5e9)', '--gradient-button-red': 'linear-gradient(135deg, #ef4444, #dc2626)',
+                '--glow-primary': '56, 189, 248', '--glow-accent': '14, 165, 233', '--btn-gold-text': '#020617'
             }
         };
         const t = themes[name] || themes.classic;
@@ -602,13 +682,40 @@ const App = {
         localStorage.setItem('lixi-theme', name);
         Sound.play('click');
     },
+    _startMarquee(textEl, container) {
+        if (!textEl || !container) return;
+        clearTimeout(textEl._mqTimer);
+        textEl.style.transition = 'none';
+        textEl.style.transform = 'translateX(0)';
+        const overflow = textEl.scrollWidth - container.clientWidth;
+        if (overflow <= 4) return;
+        const dur = Math.max(1.2, overflow * 0.033);
+        textEl._mqTimer = setTimeout(() => {
+            textEl.style.transition = `transform ${dur}s linear`;
+            textEl.style.transform = `translateX(-${overflow}px)`;
+        }, 300);
+    },
+    _stopMarquee(textEl) {
+        if (!textEl) return;
+        clearTimeout(textEl._mqTimer);
+        textEl.style.transition = 'transform 0.25s ease';
+        textEl.style.transform = 'translateX(0)';
+    },
     changeMusic(src) {
         const audio = document.getElementById('bgMusic');
         if (!audio) return;
+        const TRACKS = {
+            'music1.mp3': 'Một năm mới bình an - Sơn Tùng MTP',
+            'music2.mp3': 'Như hoa mùa xuân - Hồ Ngọc Hà, Thuỷ Tiên, Minh Hằng',
+            'music3.mp3': 'Ngày xuân long phượng xum vầy - Bích Phương'
+        };
         const playing = !audio.paused;
         audio.src = src;
         if (playing) audio.play().catch(() => { });
         localStorage.setItem('lixi-music', src);
+        const textEl = document.getElementById('music-picker-text');
+        if (textEl) { textEl.style.transform = 'translateX(0)'; textEl.textContent = TRACKS[src] || src; }
+        document.querySelectorAll('.music-option').forEach(o => o.classList.toggle('selected', o.dataset.src === src));
         Sound.play('click');
     },
     restorePreferences() {
@@ -619,11 +726,20 @@ const App = {
             if (sel) sel.value = theme;
         }
         const music = localStorage.getItem('lixi-music');
-        if (music) {
+        // Migrate old key 'music.mp3' -> 'music1.mp3' (persist the migration)
+        if (music === 'music.mp3') localStorage.setItem('lixi-music', 'music1.mp3');
+        const src = (music && music !== 'music.mp3') ? music : null;
+        if (src && src !== 'music1.mp3') {
             const audio = document.getElementById('bgMusic');
-            if (audio) audio.src = music;
-            const sel = document.getElementById('music-selector');
-            if (sel) sel.value = music;
+            if (audio) audio.src = src;
+            const TRACKS = {
+                'music1.mp3': 'Một năm mới bình an - Sơn Tùng MTP',
+                'music2.mp3': 'Như hoa mùa xuân - Hồ Ngọc Hà, Thuỷ Tiên, Minh Hằng',
+                'music3.mp3': 'Ngày xuân long phượng xum vầy - Bích Phương'
+            };
+            const textEl = document.getElementById('music-picker-text');
+            if (textEl) textEl.textContent = TRACKS[src] || src;
+            document.querySelectorAll('.music-option').forEach(o => o.classList.toggle('selected', o.dataset.src === src));
         }
     },
 
@@ -635,6 +751,7 @@ const App = {
             if (state.screen === 'screen-host-dashboard' && this.currentRoom) this.showDashboard();
             else if (state.screen === 'screen-game-wheel' && this.currentRoom && this.currentPlayer) this.startWheelGame();
             else if (state.screen === 'screen-game-envelope' && this.currentRoom && this.currentPlayer) this.startEnvelopeGame();
+            else if (state.screen === 'screen-game-scratch' && this.currentRoom && this.currentPlayer) this.startScratchGame();
             else this.showScreen(state.screen, true);
         } catch (e) { State.clear(); this.showScreen('screen-home', true); }
     },
@@ -646,7 +763,7 @@ const App = {
     initMusic() { const m = document.getElementById('bgMusic'), b = document.getElementById('musicToggle'); let p = false; b.addEventListener('click', () => { Sound.init(); if (p) { m.pause(); b.textContent = '🔇'; b.classList.remove('playing'); } else { m.play().catch(() => { }); b.textContent = '🎵'; b.classList.add('playing'); } p = !p; }); },
 
     showScreen(id, skip) {
-        if (!this.currentUser && id !== 'screen-auth') return;
+        if (!this.currentUser && !this._isGuest && id !== 'screen-auth') return;
         if (this.dashboardListener && id !== 'screen-host-dashboard') { Storage.offRoomChange(this.dashboardListener); this.dashboardListener = null; }
         document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
         const t = document.getElementById(id); if (t) { t.classList.add('active'); t.style.animation = 'none'; t.offsetHeight; t.style.animation = ''; }
@@ -658,11 +775,20 @@ const App = {
         if (id === 'screen-history') this.renderHistoryScreen();
         if (id === 'screen-player-join') {
             if (this.currentUser) { const ni = document.getElementById('player-name'); if (!ni.value) ni.value = this.currentUser.displayName || ''; }
+            // Restore last used guest name
+            const ni = document.getElementById('player-name');
+            if (ni && !ni.value) ni.value = localStorage.getItem('lixi-last-name') || '';
             if (this._deepLinkRoom) { document.getElementById('player-room-code').value = this._deepLinkRoom; this._deepLinkRoom = null; }
         }
         Sound.play('click');
     },
-    showToast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(this._toastTimer); this._toastTimer = setTimeout(() => t.classList.remove('show'), 5000); },
+    showToast(msg, type) {
+        const t = document.getElementById('toast');
+        t.textContent = msg;
+        t.className = 'toast show' + (type ? ' toast-' + type : '');
+        clearTimeout(this._toastTimer);
+        this._toastTimer = setTimeout(() => t.classList.remove('show'), type === 'error' ? 4000 : 4500);
+    },
 
     // ==================== MODE / PRIZE ====================
     selectMode(m) { this.selectedMode = m; document.querySelectorAll('.mode-card').forEach(c => c.classList.remove('selected')); document.getElementById('mode-' + m).classList.add('selected'); Sound.play('click'); },
@@ -679,16 +805,16 @@ const App = {
         });
     },
     addPrize() { this.defaultPrizes.push({ name: 'Giải mới', weight: 10, value: 0 }); this.renderPrizeList(this.defaultPrizes); Sound.play('click'); },
-    removePrize(i) { if (this.defaultPrizes.length <= 2) { this.showToast('Cần ít nhất 2 giải'); Sound.play('error'); return; } this.defaultPrizes.splice(i, 1); this.renderPrizeList(this.defaultPrizes); Sound.play('click'); },
+    removePrize(i) { if (this.defaultPrizes.length <= 2) { this.showToast('Cần ít nhất 2 giải', 'error'); Sound.play('error'); return; } this.defaultPrizes.splice(i, 1); this.renderPrizeList(this.defaultPrizes); Sound.play('click'); },
     equalPrizes() { const n = this.defaultPrizes.length; const w = parseFloat((100 / n).toFixed(2)); this.defaultPrizes.forEach(p => { p.weight = w; }); this.renderPrizeList(this.defaultPrizes); this.showToast('Đã chia đều: ' + w + '% mỗi giải'); Sound.play('click'); },
 
     // ==================== CREATE ROOM ====================
     async createRoom() {
         const name = document.getElementById('host-room-name').value.trim();
-        if (!name) { this.showToast('Vui lòng nhập tên phòng'); Sound.play('error'); return; }
+        if (!name) { this.showToast('Vui lòng nhập tên phòng', 'error'); Sound.play('error'); return; }
         const prizes = [];
         document.querySelectorAll('#prize-list .prize-item').forEach(item => { const inp = item.querySelectorAll('.input-field'); const pn = inp[0].value.trim(), pw = parseInt(inp[1].value) || 10; if (pn) { const m = pn.replace(/[,\.]/g, '').match(/(\d+)/); prizes.push({ name: pn, weight: pw, value: m ? parseInt(m[1]) : 0 }); } });
-        if (prizes.length < 2) { this.showToast('Cần ít nhất 2 giải'); Sound.play('error'); return; }
+        if (prizes.length < 2) { this.showToast('Cần ít nhất 2 giải', 'error'); Sound.play('error'); return; }
         const mt = parseInt(document.getElementById('host-max-turns').value) || 1;
         const removePrizeOnWin = document.getElementById('host-remove-prize').checked;
         const greeting = (document.getElementById('host-greeting').value || '').trim();
@@ -697,7 +823,7 @@ const App = {
         const room = { code, name, mode: this.selectedMode, prizes, maxTurns: mt, removePrizeOnWin, greeting, timerHours, isOpen: true, players: [], history: [], createdAt: new Date().toISOString(), ownerId: this.currentUser.uid };
         this.showToast('Đang tạo phòng...');
         await Storage.saveRoom(code, room); await Storage.saveCreatedRoom(this.currentUser.uid, code, name);
-        this.currentRoom = room; Sound.play('win'); this.showDashboard();
+        this.currentRoom = room; Sound.play('win'); this.showToast('Tạo phòng thành công! 🎉', 'success'); this.showDashboard();
     },
 
     // ==================== DASHBOARD ====================
@@ -707,7 +833,6 @@ const App = {
         document.getElementById('dashboard-room-code').textContent = r.code;
         this.refreshDashboard(r); this.showScreen('screen-host-dashboard');
         this.dashboardListener = r.code; Storage.onRoomChange(r.code, d => { this.currentRoom = d; this.refreshDashboard(d); });
-        State.save({ code: r.code }); // Save Host State
     },
     refreshDashboard(r) {
         const pl = r.players || [], h = r.history || [];
@@ -742,7 +867,7 @@ const App = {
         if (!h.length) { htb.innerHTML = ''; he.style.display = 'block'; }
         else {
             he.style.display = 'none';
-            const bankMap = {}; r.bankInfos?.forEach(b => bankMap[b.playerName] = b);
+            const bankMap = {}; Object.values(r.bankInfos || {}).forEach(b => bankMap[b.playerName] = b);
             htb.innerHTML = h.slice().reverse().map(x => {
                 const t = new Date(x.time).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
                 const b = bankMap[x.playerName];
@@ -806,15 +931,127 @@ const App = {
     },
     renderBankInfos(r) {
         const viewer = document.getElementById('bank-info-viewer');
-        const infos = r.bankInfos || [];
-        if (!infos.length) { viewer.innerHTML = ''; return; }
-        viewer.innerHTML = '<div class="bank-info-header" style="margin-bottom:10px">🏦 Thông tin ngân hàng người trúng (' + infos.length + ')</div>' +
-            infos.map(b => '<div class="bank-entry"><div class="bank-entry-name">' + this.esc(b.playerName) + '</div><div class="bank-entry-details">' +
-                '<div>🏦 ' + this.esc(b.bankName) + '</div>' +
-                '<div>💳 STK: <strong>' + this.esc(b.bankAccount) + '</strong></div>' +
-                '<div>👤 ' + this.esc(b.bankHolder) + '</div>' +
-                (b.qrImage ? '<img src="' + b.qrImage + '" class="bank-qr-img" alt="QR">' : '') +
-                '</div></div>').join('');
+        if (!viewer) return;
+        const infos = Object.values(r.bankInfos || {}); // players who submitted
+        const history = r.history || [];
+        // Winners = unique players who won a monetary prize (value > 0)
+        const winners = [...new Set(
+            history.filter(h => (h.value || 0) > 0).map(h => h.playerName)
+        )];
+
+        if (!winners.length && !infos.length) {
+            viewer.innerHTML = '<div class="payment-empty"><div class="empty-icon">💳</div><p>Chưa có lượt trúng thưởng nào</p></div>';
+            return;
+        }
+
+        // Badge count on tab button
+        const pending = winners.filter(p => !infos.find(b => b.playerName === p)).length;
+        const tabBtn = document.getElementById('dtab-btn-payment');
+        if (tabBtn) tabBtn.innerHTML = '💳 Thanh toán' + (pending > 0 ? ' <span class="payment-badge">' + pending + '</span>' : '');
+
+        const submitted = winners.length - pending;
+        const summaryHtml = `
+            <div class="payment-summary">
+                <div class="payment-stat ps-green">
+                    <span class="ps-num">${submitted}</span>
+                    <span class="ps-label">Đã gửi TT</span>
+                </div>
+                <div class="payment-stat ps-orange">
+                    <span class="ps-num">${pending}</span>
+                    <span class="ps-label">Chưa gửi</span>
+                </div>
+                <div class="payment-stat ps-blue">
+                    <span class="ps-num">${winners.length}</span>
+                    <span class="ps-label">Tổng người trúng</span>
+                </div>
+            </div>`;
+
+        const cardsHtml = winners.map(playerName => {
+            const info = infos.find(b => b.playerName === playerName);
+            const playerPrizes = history.filter(h => h.playerName === playerName && (h.value || 0) > 0);
+            const totalValue = playerPrizes.reduce((s, h) => s + (h.value || 0), 0);
+            const prizeNames = playerPrizes.map(h => this.esc(h.prizeName)).join(', ');
+
+            if (!info) {
+                // Winner hasn't submitted payment info yet
+                return `<div class="payment-card payment-card-pending">
+                    <div class="payment-card-header">
+                        <div class="payment-card-name">📳 ${this.esc(playerName)}</div>
+                        <span class="payment-status-badge badge-pending">⏳ Chưa gửi</span>
+                    </div>
+                    <div class="payment-card-prizes">
+                        <span class="prize-tag">🏆 ${prizeNames}</span>
+                        <span class="prize-value">${this.formatMoney(totalValue)}</span>
+                    </div>
+                    <div class="payment-card-note">⚠️ Người chơi chưa gửi thông tin nhận thưởng</div>
+                </div>`;
+            }
+
+            // Winner has submitted
+            const time = new Date(info.time).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+            return `<div class="payment-card payment-card-done">
+                <div class="payment-card-header">
+                    <div class="payment-card-name">✅ ${this.esc(playerName)}</div>
+                    <span class="payment-status-badge badge-done">✓ Đã gửi</span>
+                </div>
+                <div class="payment-card-prizes">
+                    <span class="prize-tag">🏆 ${prizeNames}</span>
+                    <span class="prize-value">${this.formatMoney(totalValue)}</span>
+                </div>
+                <div class="payment-card-body">
+                    <div class="payment-row">
+                        <span class="payment-label">🏦 Ngân hàng</span>
+                        <span class="payment-value">${this.esc(info.bankName || '—')}</span>
+                    </div>
+                    <div class="payment-row">
+                        <span class="payment-label">💳 Số TK</span>
+                        <span class="payment-value">
+                            <strong>${this.esc(info.bankAccount || '—')}</strong>
+                            ${info.bankAccount ? `<button class="copy-btn" onclick="App.copyText('${this.esc(info.bankAccount)}')" title="Sao chép">📋</button>` : ''}
+                        </span>
+                    </div>
+                    <div class="payment-row">
+                        <span class="payment-label">👤 Chủ TK</span>
+                        <span class="payment-value">${this.esc(info.bankHolder || '—')}</span>
+                    </div>
+                    <div class="payment-row">
+                        <span class="payment-label">🕒 Gửi lúc</span>
+                        <span class="payment-value" style="font-size:0.78rem;opacity:0.7">${time}</span>
+                    </div>
+                    ${info.qrImage ? `<div class="payment-qr-wrap">
+                        <img src="${info.qrImage}" class="payment-qr-img" alt="QR" onclick="App.showFullQR('${info.qrImage}')" title="Bấm để xem to">
+                        <div class="payment-qr-label">📃 Mã QR chuyển khoản (bấm để xem to)</div>
+                    </div>` : '<div class="payment-no-qr">📷 Chưa có ảnh QR</div>'}
+                </div>
+            </div>`;
+        }).join('');
+
+        // Also show people who submitted but aren't in our winner list (edge case)
+        const extraInfos = infos.filter(b => !winners.includes(b.playerName));
+        const extraHtml = extraInfos.length ? '<div class="payment-extra-header">📎 Thông tin khác</div>' +
+            extraInfos.map(b => {
+                const time = new Date(b.time).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+                return `<div class="payment-card payment-card-done">
+                    <div class="payment-card-header">
+                        <div class="payment-card-name">${this.esc(b.playerName)}</div>
+                        <span class="payment-status-badge badge-done">✓ Đã gửi</span>
+                    </div>
+                    <div class="payment-card-body">
+                        <div class="payment-row"><span class="payment-label">🏦 NH</span><span class="payment-value">${this.esc(b.bankName || '—')}</span></div>
+                        <div class="payment-row"><span class="payment-label">💳 STK</span><span class="payment-value"><strong>${this.esc(b.bankAccount || '—')}</strong>${b.bankAccount ? `<button class="copy-btn" onclick="App.copyText('${this.esc(b.bankAccount)}')">📋</button>` : ''}</span></div>
+                        <div class="payment-row"><span class="payment-label">👤 Chủ TK</span><span class="payment-value">${this.esc(b.bankHolder || '—')}</span></div>
+                        ${b.qrImage ? `<div class="payment-qr-wrap"><img src="${b.qrImage}" class="payment-qr-img" onclick="App.showFullQR('${b.qrImage}')"></div>` : ''}
+                    </div>
+                </div>`;
+            }).join('') : '';
+
+        viewer.innerHTML = summaryHtml + cardsHtml + extraHtml;
+    },
+    copyText(text) {
+        navigator.clipboard.writeText(text)
+            .then(() => this.showToast('Đã sao chép: ' + text))
+            .catch(() => this.showToast(text));
+        Sound.play('click');
     },
     exportCSV() {
         if (!this.currentRoom || !this.currentRoom.history || !this.currentRoom.history.length) { this.showToast('Không có dữ liệu'); return; }
@@ -864,12 +1101,12 @@ const App = {
         Sound.play('click');
     },
     addSettingsPrize() { this.settingsPrizes.push({ name: 'Giải mới', weight: 10, value: 0 }); this.renderPrizeList(this.settingsPrizes, 'settings-prize-list', 'settingsPrizes'); Sound.play('click'); },
-    removeSettingsPrize(i) { if (this.settingsPrizes.length <= 2) { this.showToast('Cần ít nhất 2 giải'); Sound.play('error'); return; } this.settingsPrizes.splice(i, 1); this.renderPrizeList(this.settingsPrizes, 'settings-prize-list', 'settingsPrizes'); Sound.play('click'); },
+    removeSettingsPrize(i) { if (this.settingsPrizes.length <= 2) { this.showToast('Cần ít nhất 2 giải', 'error'); Sound.play('error'); return; } this.settingsPrizes.splice(i, 1); this.renderPrizeList(this.settingsPrizes, 'settings-prize-list', 'settingsPrizes'); Sound.play('click'); },
     equalSettingsPrizes() { const n = this.settingsPrizes.length; const w = parseFloat((100 / n).toFixed(2)); this.settingsPrizes.forEach(p => { p.weight = w; }); this.renderPrizeList(this.settingsPrizes, 'settings-prize-list', 'settingsPrizes'); this.showToast('Đã chia đều: ' + w + '% mỗi giải'); Sound.play('click'); },
     async saveSettings() {
         if (!this.currentRoom) return;
         const name = document.getElementById('settings-room-name').value.trim();
-        if (!name) { this.showToast('Vui lòng nhập tên phòng'); Sound.play('error'); return; }
+        if (!name) { this.showToast('Vui lòng nhập tên phòng', 'error'); Sound.play('error'); return; }
         // Read prizes from settings prize list
         const prizes = [];
         document.querySelectorAll('#settings-prize-list .prize-item').forEach(item => {
@@ -877,11 +1114,11 @@ const App = {
             const pn = inp[0].value.trim(), pw = parseFloat(inp[1].value) || 10;
             if (pn) { const m = pn.replace(/[,\.]/g, '').match(/(\d+)/); prizes.push({ name: pn, weight: pw, value: m ? parseInt(m[1]) : 0 }); }
         });
-        if (prizes.length < 2) { this.showToast('Cần ít nhất 2 giải'); Sound.play('error'); return; }
+        if (prizes.length < 2) { this.showToast('Cần ít nhất 2 giải', 'error'); Sound.play('error'); return; }
         const mt = parseInt(document.getElementById('settings-max-turns').value) || 1;
         // Determine selected mode
         const modeEl = document.querySelector('#tab-settings .mode-card.selected');
-        const mode = modeEl && modeEl.id === 'settings-mode-envelope' ? 'envelope' : 'wheel';
+        const mode = modeEl && modeEl.id === 'settings-mode-envelope' ? 'envelope' : modeEl && modeEl.id === 'settings-mode-scratch' ? 'scratch' : 'wheel';
         // Update room
         this.currentRoom.name = name;
         this.currentRoom.mode = mode;
@@ -898,17 +1135,18 @@ const App = {
 
     // ==================== PLAYER ====================
     async joinRoom() {
-        const name = document.getElementById('player-name').value.trim(), code = document.getElementById('player-room-code').value.trim();
-        if (!name) { this.showToast('Vui lòng nhập tên'); Sound.play('error'); return; }
-        if (!code || code.length !== 6) { this.showToast('Mã phòng phải có 6 số'); Sound.play('error'); return; }
+        const name = document.getElementById('player-name').value.trim(), code = document.getElementById('player-room-code').value.replace(/\D/g, '').trim();
+        if (!name) { this.showToast('Vui lòng nhập tên', 'error'); Sound.play('error'); return; }
+        if (!code || code.length !== 6) { this.showToast('Mã phòng phải có 6 số', 'error'); Sound.play('error'); return; }
         this.showToast('Đang tìm phòng...');
-        const r = await Storage.getRoom(code); if (!r) { this.showToast('Không tìm thấy phòng!'); Sound.play('error'); return; }
-        if (!r.isOpen) { this.showToast('Phòng đã khoá'); Sound.play('error'); return; }
-        if (this.isRoomExpired(r)) { this.showToast('Phòng đã hết hạn!'); Sound.play('error'); return; }
+        const r = await Storage.getRoom(code); if (!r) { this.showToast('Không tìm thấy phòng!', 'error'); Sound.play('error'); return; }
+        if (!r.isOpen) { this.showToast('Phòng đã khoá', 'error'); Sound.play('error'); return; }
+        if (this.isRoomExpired(r)) { this.showToast('Phòng đã hết hạn!', 'error'); Sound.play('error'); return; }
         if (!r.players.find(p => p.name === name)) { r.players.push({ name, joinedAt: new Date().toISOString(), uid: this.currentUser ? this.currentUser.uid : null }); await Storage.saveRoom(code, r); }
-        const tu = r.history.filter(h => h.playerName === name).length; if (tu >= r.maxTurns) { this.showToast('Bạn đã hết lượt!'); Sound.play('error'); return; }
+        const tu = r.history.filter(h => h.playerName === name).length; if (tu >= r.maxTurns) { this.showToast('Bạn đã hết lượt!', 'error'); Sound.play('error'); return; }
         this.currentRoom = r; this.currentPlayer = name;
-        State.save({ code: r.code, player: name });
+        // Remember player name for next visit
+        localStorage.setItem('lixi-last-name', name);
         if (this.currentUser) await Storage.saveJoinedRoom(this.currentUser.uid, code, r.name, name);
         if (r.mode === 'wheel') this.startWheelGame(); else if (r.mode === 'scratch') this.startScratchGame(); else this.startEnvelopeGame();
     },
@@ -924,8 +1162,8 @@ const App = {
     async spinWheel() {
         if (Wheel.spinning) return; const r = await Storage.getRoom(this.currentRoom.code); if (!r) { this.showToast('Phòng không tồn tại'); return; }
         this.currentRoom = r;
-        if (!r.prizes || r.prizes.length === 0) { this.showToast('Đã hết giải thưởng!'); Sound.play('error'); return; }
-        const tu = r.history.filter(h => h.playerName === this.currentPlayer).length; if (tu >= r.maxTurns) { this.showToast('Hết lượt!'); Sound.play('error'); return; }
+        if (!r.prizes || r.prizes.length === 0) { this.showToast('Đã hết giải thưởng!', 'error'); Sound.play('error'); return; }
+        const tu = r.history.filter(h => h.playerName === this.currentPlayer).length; if (tu >= r.maxTurns) { this.showToast('Hết lượt!', 'error'); Sound.play('error'); return; }
         document.getElementById('spinBtn').disabled = true; document.getElementById('wheelCenterBtn').style.pointerEvents = 'none';
         Wheel.spin(p => this.handlePrizeWon(p));
     },
@@ -945,10 +1183,10 @@ const App = {
     },
     async openEnvelope(idx) {
         const env = document.getElementById('envelope-' + idx); if (env.classList.contains('flipped') || env.classList.contains('disabled')) return;
-        const r = await Storage.getRoom(this.currentRoom.code); if (!r) { this.showToast('Phòng không tồn tại'); return; }
+        const r = await Storage.getRoom(this.currentRoom.code); if (!r) { this.showToast('Phòng không tồn tại', 'error'); return; }
         this.currentRoom = r;
-        if (!r.prizes || r.prizes.length === 0) { this.showToast('Đã hết giải thưởng!'); Sound.play('error'); return; }
-        const tu = r.history.filter(h => h.playerName === this.currentPlayer).length; if (tu >= r.maxTurns) { this.showToast('Hết lượt!'); Sound.play('error'); return; }
+        if (!r.prizes || r.prizes.length === 0) { this.showToast('Đã hết giải thưởng!', 'error'); Sound.play('error'); return; }
+        const tu = r.history.filter(h => h.playerName === this.currentPlayer).length; if (tu >= r.maxTurns) { this.showToast('Hết lượt!', 'error'); Sound.play('error'); return; }
         const prize = r.prizes[this.getWeightedRandom(r.prizes)]; document.getElementById('env-prize-' + idx).textContent = prize.name;
         document.querySelectorAll('.envelope').forEach(e => { if (e.id !== 'envelope-' + idx) e.classList.add('disabled'); });
         Sound.play('flip'); env.classList.add('flipped'); setTimeout(() => this.handlePrizeWon(prize), 1200);
@@ -962,10 +1200,10 @@ const App = {
         this.playScratch();
     },
     async playScratch() {
-        const r = await Storage.getRoom(this.currentRoom.code); if (!r) { this.showToast('Phòng không tồn tại'); return; }
+        const r = await Storage.getRoom(this.currentRoom.code); if (!r) { this.showToast('Phòng không tồn tại', 'error'); return; }
         this.currentRoom = r;
-        if (!r.prizes || r.prizes.length === 0) { this.showToast('Đã hết giải thưởng!'); Sound.play('error'); return; }
-        const tu = r.history.filter(h => h.playerName === this.currentPlayer).length; if (tu >= r.maxTurns) { this.showToast('Hết lượt!'); Sound.play('error'); return; }
+        if (!r.prizes || r.prizes.length === 0) { this.showToast('Đã hết giải thưởng!', 'error'); Sound.play('error'); return; }
+        const tu = r.history.filter(h => h.playerName === this.currentPlayer).length; if (tu >= r.maxTurns) { this.showToast('Hết lượt!', 'error'); Sound.play('error'); return; }
         const prize = r.prizes[this.getWeightedRandom(r.prizes)];
         ScratchCard.init(prize);
     },
@@ -973,6 +1211,8 @@ const App = {
     async handlePrizeWon(prize) {
         const r = await Storage.getRoom(this.currentRoom.code); if (!r) return; r.history = r.history || [];
         r.history.push({ playerName: this.currentPlayer, prizeName: prize.name, value: prize.value === -1 ? 0 : (prize.value || 0), time: new Date().toISOString(), uid: this.currentUser ? this.currentUser.uid : null });
+        // Extra turn prize: increment maxTurns so the player can actually play again
+        if (prize.value === -1) r.maxTurns = (r.maxTurns || 1) + 1;
         // Remove prize from pool if enabled
         if (r.removePrizeOnWin) {
             const pi = r.prizes.findIndex(p => p.name === prize.name);
@@ -987,24 +1227,45 @@ const App = {
         else { $('result-emoji').textContent = '🎉'; $('result-title').textContent = 'Chúc mừng!'; $('result-prize').textContent = prize.name; $('result-message').textContent = this.currentPlayer + ' đã nhận được lì xì!'; }
         const tl = r.maxTurns - r.history.filter(h => h.playerName === this.currentPlayer).length, btn = $('btn-play-again');
         const noPrizes = r.removePrizeOnWin && (!r.prizes || r.prizes.length === 0);
-        if ((tl > 0 || extra) && !noPrizes) { btn.style.display = 'inline-flex'; btn.textContent = '🔄 Chơi tiếp (còn ' + (extra ? tl + 1 : tl) + ' lượt)'; } else btn.style.display = 'none';
+        if ((tl > 0 || extra) && !noPrizes) { btn.style.display = 'inline-flex'; btn.textContent = '🔄 Chơi tiếp (còn ' + tl + ' lượt)'; } else btn.style.display = 'none';
         if (noPrizes) { this.showToast('🎯 Phòng đã hết giải thưởng!'); }
         const greetEl = $('result-greeting');
         if (r.greeting) { greetEl.textContent = r.greeting; greetEl.style.display = 'block'; } else { greetEl.style.display = 'none'; }
         // Show bank info section for monetary prizes
         const bankSection = $('bank-info-section');
-        if ((prize.value || 0) > 0) { bankSection.style.display = 'block'; } else { bankSection.style.display = 'none'; }
+        if ((prize.value || 0) > 0) { bankSection.style.display = 'block'; this.updateBankHint(); } else { bankSection.style.display = 'none'; }
         this.showScreen('screen-result');
         if (big) { Sound.play('bigwin'); Confetti.launch(5000); } else if (!luck) { Sound.play('win'); Confetti.launch(3000); } else Sound.play('click');
     },
     async playAgain() { const r = await Storage.getRoom(this.currentRoom.code); if (!r) { this.showToast('Phòng không còn tồn tại'); this.showScreen('screen-home'); return; } this.currentRoom = r; if (r.mode === 'wheel') this.startWheelGame(); else if (r.mode === 'scratch') this.startScratchGame(); else this.startEnvelopeGame(); },
     leaveGame() { ScratchCard.reset(); this.currentPlayer = null; this.currentRoom = null; State.clear(); this.showScreen('screen-home'); },
+    updateBankHint() {
+        const hint = document.getElementById('bank-info-hint');
+        if (!hint) return;
+        const bn = (document.getElementById('bank-name') || {}).value || '';
+        const ba = (document.getElementById('bank-account') || {}).value || '';
+        const bh = (document.getElementById('bank-holder') || {}).value || '';
+        const hasQR = !!this._uploadedQR;
+        const hasAllText = bn.trim() && ba.trim() && bh.trim();
+        const opts = hint.querySelectorAll('.bank-hint-option');
+        if (hasQR) {
+            opts[0].classList.remove('done'); opts[1].classList.add('done');
+        } else if (hasAllText) {
+            opts[0].classList.add('done'); opts[1].classList.remove('done');
+        } else {
+            opts[0].classList.remove('done'); opts[1].classList.remove('done');
+        }
+    },
     async sendBankInfo() {
         if (!this.currentPlayer) return;
         const bn = document.getElementById('bank-name').value.trim();
         const ba = document.getElementById('bank-account').value.trim();
         const bh = document.getElementById('bank-holder').value.trim();
-        if (!bn || !ba || !bh) { this.showToast('Vui lòng nhập đầy đủ thông tin'); Sound.play('error'); return; }
+        const hasQR = !!this._uploadedQR;
+        const hasAllText = bn && ba && bh;
+        if (!hasQR && !hasAllText) {
+            this.showToast('Vui lòng điền đủ 3 thông tin hoặc thêm ảnh QR', 'error'); Sound.play('error'); return;
+        }
 
         const data = {
             playerName: this.currentPlayer,
@@ -1018,13 +1279,14 @@ const App = {
         try {
             const roomRef = db.ref('rooms/' + this.currentRoom.code + '/bankInfos');
             await roomRef.push().set(data);
-            this.showToast('Đã gửi thông tin chuyển khoản!'); Sound.play('success');
+            this.showToast('Đã gửi thông tin chuyển khoản! ✅', 'success'); Sound.play('win');
             document.getElementById('bank-info-section').style.display = 'none';
             this._uploadedQR = null;
             document.getElementById('bank-qr-upload').value = '';
             document.getElementById('qr-preview-wrapper').style.display = 'none';
             document.getElementById('qr-upload-label').style.display = 'flex';
-        } catch (e) { this.showToast('Gửi lỗi'); }
+            this.updateBankHint();
+        } catch (e) { this.showToast('Gửi lỗi, vui lòng thử lại', 'error'); }
         document.getElementById('bank-name').value = '';
         document.getElementById('bank-account').value = '';
         document.getElementById('bank-holder').value = '';
@@ -1039,6 +1301,7 @@ const App = {
             preview.src = this._uploadedQR;
             document.getElementById('qr-preview-wrapper').style.display = 'block';
             document.getElementById('qr-upload-label').style.display = 'none';
+            this.updateBankHint();
         };
         reader.readAsDataURL(file);
     },

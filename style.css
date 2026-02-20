@@ -163,6 +163,70 @@ body {
     }
 }
 
+/* --- Modal System --- */
+.modal {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.modal.active {
+    display: flex;
+    opacity: 1;
+}
+
+/* Base modal content style if not using glass-card */
+.modal-content {
+    background: var(--gradient-card);
+    border: 1px solid var(--border-glow);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-gold);
+    width: 90%;
+    max-width: 400px;
+    max-height: 90vh;
+    overflow-y: auto;
+    position: relative;
+    padding: var(--space-xl);
+    transform: scale(0.9);
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.modal.active .modal-content {
+    transform: scale(1);
+    animation: popIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    /* Lower z-index than modal but high enough */
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(5px);
+    display: none;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-overlay.active {
+    display: flex;
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes popIn { 
+    from { opacity: 0; transform: scale(0.9) translateY(10px); } 
+    to { opacity: 1; transform: scale(1) translateY(0); } 
+}
+
 /* --- App Container --- */
 .app-container {
     position: relative;
@@ -801,20 +865,29 @@ select.input-field option {
     border-radius: var(--radius-md);
     padding: 3px;
     margin-bottom: var(--space-md);
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+}
+
+.tabs::-webkit-scrollbar {
+    display: none;
 }
 
 .tab {
-    flex: 1;
-    padding: 10px 14px;
+    flex: 0 0 auto;
+    min-width: fit-content;
+    padding: 10px 12px;
     border: none;
     background: transparent;
     color: var(--text-muted);
     font-family: 'Outfit', sans-serif;
-    font-size: 0.85rem;
+    font-size: 0.82rem;
     font-weight: 500;
     border-radius: var(--radius-sm);
     cursor: pointer;
     transition: var(--transition-fast);
+    white-space: nowrap;
 }
 
 .tab.active {
@@ -1513,6 +1586,16 @@ select.input-field option {
     opacity: 1;
 }
 
+.toast.toast-error {
+    border-color: rgba(239, 68, 68, 0.5);
+    background: linear-gradient(145deg, rgba(127, 20, 20, 0.6), rgba(80, 0, 0, 0.4));
+}
+
+.toast.toast-success {
+    border-color: rgba(52, 211, 153, 0.5);
+    background: linear-gradient(145deg, rgba(5, 78, 59, 0.6), rgba(2, 44, 34, 0.4));
+}
+
 /* --- Responsive --- */
 @media (max-width: 480px) {
     .brand-title {
@@ -1543,6 +1626,21 @@ select.input-field option {
 
     .envelope-grid {
         gap: var(--space-sm);
+    }
+
+    .scratch-grid {
+        max-width: 320px;
+        gap: 10px;
+    }
+
+    .ticket-seal {
+        width: 42px;
+        height: 42px;
+        font-size: 1.3rem;
+    }
+
+    .scratch-stage {
+        height: 160px;
     }
 
     .dashboard-stats {
@@ -1836,31 +1934,13 @@ select.input-field option {
     white-space: nowrap;
 }
 
+.pw-req.valid {
+    color: #22c55e;
+}
+
 /* ==============================================
-   QR MODAL
+   QR MODAL — canvas helper
    ============================================== */
-.modal-overlay {
-    position: fixed;
-    inset: 0;
-    z-index: 9999;
-    background: rgba(0, 0, 0, 0.7);
-    backdrop-filter: blur(8px);
-    display: none;
-    align-items: center;
-    justify-content: center;
-    padding: 20px;
-}
-
-.modal-overlay.active {
-    display: flex;
-    animation: fadeIn 0.3s ease;
-}
-
-.modal-content {
-    max-width: 360px;
-    width: 100%;
-}
-
 .modal-content canvas {
     border-radius: var(--radius-md);
 }
@@ -1925,114 +2005,211 @@ select.input-field option {
 }
 
 /* ==============================================
-   SCRATCH CARD GRID + OVERLAY
+   SCRATCH CARD GRID — Modern 2025 Design
    ============================================== */
 .scratch-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 12px;
-    max-width: 360px;
+    gap: 14px;
+    width: 100%;
+    max-width: 380px;
     margin: 0 auto;
-    padding: 0 8px;
+    padding: 0 4px;
 }
 
+/* ---- Scratch Ticket Card ---- */
 .scratch-card-item {
-    aspect-ratio: 3/4;
+    aspect-ratio: 2/3;
     border-radius: var(--radius-md);
-    background: linear-gradient(135deg, var(--card-color, #c92a2a), color-mix(in srgb, var(--card-color, #c92a2a) 60%, #000));
+    background: var(--gradient-red);
     cursor: pointer;
     position: relative;
     overflow: hidden;
-    border: 2px solid rgba(251, 191, 36, 0.3);
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
-    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    border: 2px solid rgba(var(--glow-primary), 0.5);
+    box-shadow:
+        0 6px 20px rgba(0, 0, 0, 0.5),
+        inset 0 1px 0 rgba(255, 255, 255, 0.15);
+    transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1),
+                box-shadow 0.25s ease,
+                border-color 0.25s ease;
+    animation: ticketFloat 4s ease-in-out infinite;
 }
 
+/* Staggered float animation */
+.scratch-card-item:nth-child(1) { animation-delay: 0s; }
+.scratch-card-item:nth-child(2) { animation-delay: 0.4s; }
+.scratch-card-item:nth-child(3) { animation-delay: 0.8s; }
+.scratch-card-item:nth-child(4) { animation-delay: 0.2s; }
+.scratch-card-item:nth-child(5) { animation-delay: 0.6s; }
+.scratch-card-item:nth-child(6) { animation-delay: 1.0s; }
+.scratch-card-item:nth-child(7) { animation-delay: 0.1s; }
+.scratch-card-item:nth-child(8) { animation-delay: 0.5s; }
+.scratch-card-item:nth-child(9) { animation-delay: 0.9s; }
+
+@keyframes ticketFloat {
+    0%, 100% { transform: translateY(0px); }
+    50%       { transform: translateY(-5px); }
+}
+
+/* Gold foil shimmer */
 .scratch-card-item::before {
     content: '';
     position: absolute;
     inset: 0;
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, transparent 50%, rgba(0, 0, 0, 0.1) 100%);
+    background: linear-gradient(
+        105deg,
+        transparent 40%,
+        rgba(255, 255, 255, 0.18) 50%,
+        transparent 60%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 3s ease-in-out infinite;
     pointer-events: none;
+    z-index: 3;
 }
 
-.scratch-card-item::after {
-    content: '🎫';
-    position: absolute;
-    bottom: 6px;
-    right: 6px;
-    font-size: 0.7rem;
-    opacity: 0.4;
+.scratch-card-item:nth-child(even)::before { animation-delay: 1.5s; }
+
+@keyframes shimmer {
+    0%   { background-position: -200% 0; opacity: 0; }
+    20%  { opacity: 1; }
+    80%  { opacity: 1; }
+    100% { background-position: 200% 0; opacity: 0; }
 }
 
-.scratch-card-item:hover {
-    transform: translateY(-4px) scale(1.05);
-    box-shadow: 0 0 20px rgba(251, 191, 36, 0.3);
+/* Hover / Active */
+.scratch-card-item:not(.disabled):not(.selected):hover {
+    transform: translateY(-8px) scale(1.06);
     border-color: var(--gold-400);
+    box-shadow:
+        0 16px 40px rgba(0, 0, 0, 0.5),
+        0 0 20px rgba(var(--glow-primary), 0.5),
+        inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    animation-play-state: paused;
 }
 
-.scratch-card-item:active {
-    transform: scale(0.95);
+.scratch-card-item:active:not(.disabled) {
+    transform: scale(0.94);
+    transition-duration: 0.1s;
 }
 
 .scratch-card-item.disabled {
-    opacity: 0.3;
+    opacity: 0.25;
     pointer-events: none;
-    transform: scale(0.9);
-    filter: grayscale(0.5);
+    filter: saturate(0.3) brightness(0.5);
+    transform: scale(0.88) !important;
+    animation: none !important;
 }
 
 .scratch-card-item.selected {
-    animation: cardPulse 0.5s ease;
-    border-color: var(--gold-400);
-    box-shadow: 0 0 30px rgba(251, 191, 36, 0.5);
+    animation: ticketPop 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+    border-color: var(--gold-300);
+    box-shadow:
+        0 0 0 3px rgba(var(--glow-primary), 0.6),
+        0 0 30px rgba(var(--glow-primary), 0.4),
+        0 20px 50px rgba(0, 0, 0, 0.4);
 }
 
-@keyframes cardPulse {
-    0% {
-        transform: scale(1);
-    }
-
-    50% {
-        transform: scale(1.1);
-        box-shadow: 0 0 40px rgba(251, 191, 36, 0.6);
-    }
-
-    100% {
-        transform: scale(1.05);
-    }
+@keyframes ticketPop {
+    0%   { transform: scale(1); }
+    40%  { transform: scale(1.18) rotate(-2deg); }
+    70%  { transform: scale(1.08) rotate(1deg); }
+    100% { transform: scale(1.1); }
 }
 
-.scratch-card-face {
+/* ---- Ticket inner structure: top strip / seal / bottom ---- */
+.scratch-ticket {
     display: flex;
     flex-direction: column;
-    align-items: center;
-    justify-content: center;
     height: 100%;
-    gap: 6px;
     position: relative;
     z-index: 1;
 }
 
-.scratch-card-icon {
-    font-size: 2rem;
-    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.4));
+.ticket-top {
+    background: rgba(0, 0, 0, 0.35);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 5px 8px;
+    border-bottom: 1px solid rgba(var(--glow-primary), 0.25);
 }
 
-.scratch-card-label {
-    font-size: 0.7rem;
-    color: rgba(255, 255, 255, 0.8);
-    font-weight: 600;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+.ticket-brand {
+    font-size: 0.55rem;
+    font-weight: 900;
+    letter-spacing: 2px;
+    color: var(--gold-300);
+    text-transform: uppercase;
+    text-shadow: 0 0 6px rgba(var(--glow-primary), 0.6);
 }
 
-/* Scratch Overlay */
+.ticket-stars {
+    font-size: 0.5rem;
+    letter-spacing: 1px;
+    color: var(--gold-400);
+    opacity: 0.7;
+}
+
+.ticket-main {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+}
+
+.ticket-seal {
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, #fff176, #fbbf24, #d97706);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow:
+        0 0 0 2px rgba(255, 255, 255, 0.3),
+        0 0 12px rgba(251, 191, 36, 0.7),
+        0 4px 12px rgba(0, 0, 0, 0.4),
+        inset 0 2px 3px rgba(255, 255, 255, 0.5);
+    position: relative;
+    font-size: 1.6rem;
+    color: #7c1a1a;
+    font-weight: 900;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    animation: sealPulse 3s ease-in-out infinite;
+}
+
+@keyframes sealPulse {
+    0%, 100% { box-shadow: 0 0 0 2px rgba(255,255,255,0.3), 0 0 12px rgba(251,191,36,0.7), 0 4px 12px rgba(0,0,0,0.4), inset 0 2px 3px rgba(255,255,255,0.5); }
+    50%       { box-shadow: 0 0 0 2px rgba(255,255,255,0.3), 0 0 22px rgba(251,191,36,1.0), 0 4px 12px rgba(0,0,0,0.4), inset 0 2px 3px rgba(255,255,255,0.5); }
+}
+
+.ticket-bottom {
+    background: rgba(0, 0, 0, 0.35);
+    border-top: 1px solid rgba(var(--glow-primary), 0.25);
+    padding: 5px 8px;
+    text-align: center;
+}
+
+.ticket-num {
+    font-size: 0.5rem;
+    font-weight: 700;
+    color: rgba(var(--glow-primary), 0.8);
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+}
+
+/* ============================================
+   SCRATCH OVERLAY — Modern Dark Glass
+   ============================================ */
 .scratch-overlay {
     position: fixed;
     inset: 0;
     z-index: 10000;
-    background: rgba(0, 0, 0, 0.85);
-    backdrop-filter: blur(10px);
+    background: rgba(0, 0, 0, 0.88);
+    backdrop-filter: blur(16px) saturate(1.4);
+    -webkit-backdrop-filter: blur(16px) saturate(1.4);
     display: none;
     align-items: center;
     justify-content: center;
@@ -2041,48 +2218,62 @@ select.input-field option {
 
 .scratch-overlay.active {
     display: flex;
-    animation: fadeIn 0.4s ease;
+    animation: fadeIn 0.35s ease;
 }
 
 .scratch-overlay-card {
-    background: linear-gradient(135deg, #1a0505, #2d0808);
-    border-radius: var(--radius-lg);
-    padding: 24px;
-    max-width: 380px;
+    background: var(--gradient-card);
+    backdrop-filter: blur(30px);
+    -webkit-backdrop-filter: blur(30px);
+    border-radius: var(--radius-xl);
+    padding: 28px 24px 24px;
+    max-width: 400px;
     width: 100%;
-    border: 2px solid rgba(251, 191, 36, 0.25);
-    box-shadow: 0 0 60px rgba(251, 191, 36, 0.15), 0 20px 60px rgba(0, 0, 0, 0.6);
-    animation: overlayZoomIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    border: 1px solid rgba(var(--glow-primary), 0.35);
+    box-shadow:
+        0 0 0 1px rgba(var(--glow-primary), 0.1),
+        0 0 60px rgba(var(--glow-primary), 0.12),
+        0 30px 80px rgba(0, 0, 0, 0.7);
+    animation: overlaySlideUp 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-@keyframes overlayZoomIn {
-    0% {
-        transform: scale(0.5);
-        opacity: 0;
-    }
-
-    100% {
-        transform: scale(1);
-        opacity: 1;
-    }
+@keyframes overlaySlideUp {
+    from { transform: translateY(40px) scale(0.9); opacity: 0; }
+    to   { transform: translateY(0) scale(1); opacity: 1; }
 }
 
 .scratch-overlay-header {
     text-align: center;
-    font-size: 1.1rem;
-    font-weight: 700;
-    color: var(--gold-400);
-    margin-bottom: 16px;
+    font-size: 1.2rem;
+    font-weight: 800;
+    background: var(--gradient-gold);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 6px;
+    letter-spacing: 0.5px;
+}
+
+.scratch-overlay-subtitle {
+    text-align: center;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    margin-bottom: 18px;
 }
 
 .scratch-stage {
     position: relative;
-    width: 320px;
-    height: 220px;
+    width: 100%;
+    max-width: 320px;
+    height: 200px;
     margin: 0 auto;
     border-radius: var(--radius-lg);
     overflow: hidden;
-    box-shadow: 0 0 0 4px var(--gold-500), 0 0 30px rgba(251, 191, 36, 0.4), 0 8px 32px rgba(0, 0, 0, 0.5);
+    box-shadow:
+        0 0 0 3px rgba(var(--glow-primary), 0.6),
+        0 0 0 5px rgba(var(--glow-primary), 0.15),
+        0 0 30px rgba(var(--glow-primary), 0.3),
+        0 12px 40px rgba(0, 0, 0, 0.6);
 }
 
 .scratch-stage canvas {
@@ -2100,13 +2291,52 @@ select.input-field option {
     inset: 0;
     z-index: 1;
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-    font-size: 1.8rem;
-    font-weight: 800;
-    color: var(--gold-400);
-    background: linear-gradient(135deg, #1a0505, #2d1010);
-    text-shadow: 0 0 20px rgba(251, 191, 36, 0.5);
+    gap: 8px;
+    font-size: 1.6rem;
+    font-weight: 900;
+    background: var(--gradient-card);
+    color: var(--gold-300);
+    text-shadow: 0 0 20px rgba(var(--glow-primary), 0.6);
+    padding: 12px;
+    text-align: center;
+}
+
+.scratch-prize::before {
+    content: '🎉';
+    font-size: 2rem;
+    display: block;
+}
+
+/* Scratch hint bar */
+.scratch-hint {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 14px;
+    padding: 8px 16px;
+    background: rgba(var(--glow-primary), 0.06);
+    border: 1px solid rgba(var(--glow-primary), 0.12);
+    border-radius: var(--radius-full);
+}
+
+.scratch-hint-icon {
+    font-size: 1rem;
+    animation: scratchWiggle 1.2s ease-in-out infinite;
+}
+
+@keyframes scratchWiggle {
+    0%, 100% { transform: rotate(-20deg) translateX(0); }
+    50%       { transform: rotate(20deg) translateX(4px); }
+}
+
+.scratch-hint-text {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    font-weight: 500;
 }
 
 /* ==============================================
@@ -2119,6 +2349,44 @@ select.input-field option {
     padding: 16px;
     margin-top: 16px;
     animation: fadeSlideIn 0.4s ease 0.2s both;
+}
+
+/* --- Bank Info Hint Bar --- */
+.bank-info-hint {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 10px 14px;
+    background: rgba(var(--glow-primary), 0.06);
+    border: 1px solid rgba(var(--glow-primary), 0.2);
+    border-radius: var(--radius-md);
+    margin-bottom: 14px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    flex-wrap: wrap;
+}
+
+.bank-hint-option {
+    color: var(--text-muted);
+    padding: 4px 10px;
+    border-radius: var(--radius-full);
+    border: 1px solid rgba(var(--glow-primary), 0.2);
+    transition: all 0.25s ease;
+}
+
+.bank-hint-option.done {
+    color: #22c55e;
+    border-color: rgba(34, 197, 94, 0.5);
+    background: rgba(34, 197, 94, 0.1);
+}
+
+.bank-hint-or {
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    opacity: 0.7;
 }
 
 /* --- Bank Info Redesign --- */
@@ -2278,6 +2546,242 @@ select.input-field option {
 }
 
 /* ==============================================
+   PAYMENT TAB — Dashboard
+   ============================================== */
+
+/* Tab badge */
+.payment-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 9px;
+    background: #ef4444;
+    color: #fff;
+    font-size: 0.65rem;
+    font-weight: 700;
+    vertical-align: middle;
+    margin-left: 4px;
+}
+
+/* Summary row */
+.payment-summary {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.payment-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 10px 6px;
+    border-radius: var(--radius-md);
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.ps-num {
+    font-size: 1.5rem;
+    font-weight: 800;
+    line-height: 1;
+}
+
+.ps-label {
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    opacity: 0.65;
+    margin-top: 3px;
+    text-align: center;
+}
+
+.ps-green .ps-num { color: #22c55e; }
+.ps-orange .ps-num { color: #f97316; }
+.ps-blue .ps-num { color: var(--gold-400); }
+
+/* Payment cards */
+.payment-card {
+    border-radius: var(--radius-md);
+    margin-bottom: 12px;
+    overflow: hidden;
+    border: 1px solid transparent;
+    transition: var(--transition-fast);
+}
+
+.payment-card-done {
+    background: rgba(34, 197, 94, 0.06);
+    border-color: rgba(34, 197, 94, 0.25);
+}
+
+.payment-card-pending {
+    background: rgba(249, 115, 22, 0.06);
+    border-color: rgba(249, 115, 22, 0.25);
+}
+
+.payment-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.payment-card-name {
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: var(--text-primary);
+}
+
+.payment-status-badge {
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: var(--radius-full);
+}
+
+.badge-done {
+    background: rgba(34, 197, 94, 0.15);
+    color: #22c55e;
+    border: 1px solid rgba(34, 197, 94, 0.4);
+}
+
+.badge-pending {
+    background: rgba(249, 115, 22, 0.15);
+    color: #f97316;
+    border: 1px solid rgba(249, 115, 22, 0.4);
+}
+
+.payment-card-prizes {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 7px 14px;
+    background: rgba(0, 0, 0, 0.15);
+    font-size: 0.78rem;
+    gap: 8px;
+}
+
+.prize-tag {
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+}
+
+.prize-value {
+    color: var(--gold-400);
+    font-weight: 700;
+    flex-shrink: 0;
+}
+
+.payment-card-body {
+    padding: 10px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+}
+
+.payment-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 0.83rem;
+}
+
+.payment-label {
+    color: var(--text-muted);
+    flex-shrink: 0;
+    min-width: 80px;
+}
+
+.payment-value {
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.85rem;
+    text-align: right;
+    flex: 1;
+    justify-content: flex-end;
+}
+
+.copy-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 0.85rem;
+    padding: 2px 5px;
+    border-radius: 4px;
+    opacity: 0.7;
+    transition: opacity 0.2s;
+    line-height: 1;
+}
+
+.copy-btn:hover {
+    opacity: 1;
+    background: rgba(var(--glow-primary), 0.15);
+}
+
+.payment-qr-wrap {
+    margin-top: 6px;
+    text-align: center;
+}
+
+.payment-qr-img {
+    max-width: 180px;
+    width: 100%;
+    border-radius: var(--radius-md);
+    border: 2px solid rgba(var(--glow-primary), 0.3);
+    cursor: zoom-in;
+    transition: transform 0.2s;
+}
+
+.payment-qr-img:hover {
+    transform: scale(1.03);
+    border-color: var(--gold-400);
+}
+
+.payment-qr-label {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    margin-top: 4px;
+}
+
+.payment-no-qr {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    padding: 4px 0;
+}
+
+.payment-card-note {
+    padding: 8px 14px;
+    font-size: 0.78rem;
+    color: #f97316;
+    opacity: 0.85;
+}
+
+.payment-extra-header {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    margin: 8px 0 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.payment-empty {
+    text-align: center;
+    padding: 30px 0;
+    color: var(--text-muted);
+}
+
+/* ==============================================
    ENHANCED RESULT
    ============================================== */
 .result-spotlight {
@@ -2355,24 +2859,11 @@ select.input-field option {
 .result-container {
     position: relative;
     overflow: hidden;
-}
-
-/* ==============================================
-   SELECT FIELD STYLING
-   ============================================== */
-select.input-field {
-    appearance: none;
-    -webkit-appearance: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M6 8L1 3h10z' fill='%23fbbf24'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 12px center;
-    padding-right: 36px;
-    cursor: pointer;
-}
-
-select.input-field option {
-    background: #1a0505;
-    color: #fff;
+    min-height: 60vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
 }
 
 /* ==============================================
@@ -2384,4 +2875,104 @@ select.input-field option {
 
 #screen-stats .stat-card {
     background: linear-gradient(135deg, rgba(251, 191, 36, 0.1), rgba(224, 49, 49, 0.06));
+}
+
+/* ==============================================
+   MUSIC PICKER
+   ============================================== */
+.music-picker {
+    position: relative;
+}
+.music-picker-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(var(--glow-primary), 0.2);
+    border-radius: var(--radius-md);
+    padding: 12px 14px;
+    color: var(--text-primary);
+    font-family: 'Outfit', sans-serif;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: var(--transition-fast);
+    text-align: left;
+}
+.music-picker-btn:hover {
+    border-color: var(--gold-400);
+    background: rgba(0, 0, 0, 0.45);
+}
+.music-picker-note {
+    flex-shrink: 0;
+}
+.music-picker-display {
+    flex: 1;
+    overflow: hidden;
+}
+.music-picker-text {
+    display: inline-block;
+    white-space: nowrap;
+    will-change: transform;
+}
+.music-picker-arrow {
+    flex-shrink: 0;
+    font-size: 0.7rem;
+    opacity: 0.7;
+    transition: transform 0.2s ease;
+}
+.music-picker-arrow.rotated {
+    transform: rotate(180deg);
+}
+.music-picker-dropdown {
+    display: none;
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    z-index: 1100;
+    background: var(--gradient-card);
+    border: 1px solid var(--border-glow);
+    border-radius: var(--radius-md);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    overflow: hidden;
+    box-shadow: var(--shadow-gold);
+}
+.music-picker-dropdown.open {
+    display: block;
+    animation: fadeSlideIn 0.18s ease;
+}
+.music-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 11px 14px;
+    cursor: pointer;
+    transition: var(--transition-fast);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+.music-option:last-child {
+    border-bottom: none;
+}
+.music-option:hover {
+    background: rgba(var(--glow-primary), 0.1);
+}
+.music-option.selected {
+    background: rgba(var(--glow-primary), 0.15);
+    color: var(--gold-400);
+}
+.music-opt-note {
+    flex-shrink: 0;
+    font-size: 1rem;
+}
+.music-opt-textbox {
+    flex: 1;
+    overflow: hidden;
+}
+.music-opt-inner {
+    display: inline-block;
+    white-space: nowrap;
+    font-size: 0.82rem;
+    will-change: transform;
 }
