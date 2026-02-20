@@ -477,7 +477,10 @@ const App = {
             if (user) {
                 this.currentUser = user; this._isGuest = false; this.updateUserBar(user);
                 const state = State.load();
-                if (state && state.screen && state.screen !== 'screen-auth') await this.restoreState(state);
+                if (this._deepLinkRoom) {
+                    this.showScreen('screen-home', true);
+                    this.showScreen('screen-player-join');
+                } else if (state && state.screen && state.screen !== 'screen-auth') await this.restoreState(state);
                 else this.showScreen('screen-home', true);
             } else {
                 if (!this._isGuest) {
