@@ -911,7 +911,7 @@ const App = {
         if (!this.currentRoom) return;
         const container = document.getElementById('qr-code'); container.innerHTML = '';
         if (typeof QRCode !== 'undefined') {
-            QRCode.toCanvas(this.getRoomURL(), { width: 200, margin: 2, color: { dark: '#1a0505', light: '#fff8e1' } }, (err, canvas) => { if (!err) container.appendChild(canvas); });
+            new QRCode(container, { text: this.getRoomURL(), width: 200, height: 200, colorDark: '#1a0505', colorLight: '#fff8e1', correctLevel: QRCode.CorrectLevel.H });
         } else { container.innerHTML = '<p class="text-muted">Không thể tạo QR. Mã phòng: ' + this.currentRoom.code + '</p>'; }
         document.getElementById('qr-modal').classList.add('active'); Sound.play('click');
     },
