@@ -5,6 +5,7 @@
    ============================================ */
 
 const Storage = {
+    ensureArray(val) { if (Array.isArray(val)) return val; if (val && typeof val === 'object') return Object.values(val); return []; },
     roomRef(code) { return db.ref('rooms/' + code); },
     userRef(uid) { return db.ref('users/' + uid); },
     async getRoom(code) {
@@ -14,9 +15,9 @@ const Storage = {
     async deleteRoom(code) { try { await this.roomRef(code).remove(); } catch (e) { console.error(e); } },
     onRoomChange(code, cb) { this.roomRef(code).on('value', s => { const d = s.val(); if (d) { d.players = d.players || []; d.history = d.history || []; cb(d); } }); },
     offRoomChange(code) { this.roomRef(code).off('value'); },
-    async getUserHistory(uid) { try { const s = await this.userRef(uid).child('history').once('value'); return s.val() || { created: [], joined: [] }; } catch (e) { return { created: [], joined: [] }; } },
+    async getUserHistory(uid) { try { const s = await this.userRef(uid).child('history').once('value'); const d = s.val() || {}; return { created: this.ensureArray(d.created), joined: this.ensureArray(d.joined) }; } catch (e) { console.error('getUserHistory error for uid:', uid, e); return { created: [], joined: [] }; } },
     async saveCreatedRoom(uid, code, name) {
-        try { const h = await this.getUserHistory(uid); if (!h.created.find(r => r.code === code)) { h.created.unshift({ code, name, time: new Date().toISOString() }); if (h.created.length > 30) h.created = h.created.slice(0, 30); await this.userRef(uid).child('history').set(h); } } catch (e) { console.error(e); }
+        try { const h = await this.getUserHistory(uid); if (!Array.isArray(h.created)) h.created = []; if (!h.created.find(r => r.code === code)) { h.created.unshift({ code, name, time: new Date().toISOString() }); if (h.created.length > 30) h.created = h.created.slice(0, 30); await this.userRef(uid).child('history').set(h); } } catch (e) { console.error('saveCreatedRoom error', e); }
     },
     async saveJoinedRoom(uid, code, name, playerName) {
         try {
@@ -121,8 +122,130 @@ const Wheel = {
     }
 };
 
+const ScratchCard = {
+    canvas: null, ctx: null, prize: null, scratching: false, revealed: false,
+    renderGrid() {
+        const grid = document.getElementById('scratch-grid');
+        grid.innerHTML = '';
+        for (let i = 0; i < 9; i++) {
+            const card = document.createElement('div');
+            card.className = 'scratch-card-item';
+            card.dataset.index = i;
+            // Uniform red card with gold 福 (Fortune) symbol
+            card.innerHTML = `
+                <div class="scratch-card-face">
+                    <div class="scratch-card-pattern"></div>
+                    <span class="scratch-card-icon" style="color:#fbbf24;font-size:3.5rem;font-family:'Outfit',sans-serif">福</span>
+                    <span class="scratch-card-label">Thẻ #${i + 1}</span>
+                </div>`;
+            card.addEventListener('click', () => this.selectCard(i));
+            grid.appendChild(card);
+        }
+    },
+    selectCard(idx) {
+        if (this.revealed) return;
+        const cards = document.querySelectorAll('.scratch-card-item');
+        cards.forEach((c, i) => { if (i !== idx) c.classList.add('disabled'); });
+        cards[idx].classList.add('selected');
+        Sound.play('click');
+        setTimeout(() => {
+            document.getElementById('scratch-overlay').classList.add('active');
+            this.initCanvas();
+        }, 400);
+    },
+    initCanvas() {
+        this.canvas = document.getElementById('scratchCanvas');
+        this.ctx = this.canvas.getContext('2d', { alpha: true });
+        this.revealed = false;
+        document.getElementById('scratch-prize-text').textContent = this.prize.name;
+
+        // Setup initial scratch layer
+        this.ctx.globalCompositeOperation = 'source-over';
+        const g = this.ctx.createLinearGradient(0, 0, 320, 220);
+        g.addColorStop(0, '#c92a2a'); g.addColorStop(0.5, '#e03131'); g.addColorStop(1, '#b91c1c');
+        this.ctx.fillStyle = g; this.ctx.fillRect(0, 0, 320, 220);
+
+        // Add decorative patterns to layer
+        this.ctx.fillStyle = 'rgba(251,191,36,0.15)';
+        for (let i = 0; i < 12; i++) {
+            this.ctx.beginPath();
+            this.ctx.arc(Math.random() * 320, Math.random() * 220, 20 + Math.random() * 30, 0, Math.PI * 2);
+            this.ctx.fill();
+        }
+
+        this.ctx.fillStyle = '#fbbf24';
+        this.ctx.font = 'bold 26px Outfit,sans-serif';
+        this.ctx.textAlign = 'center';
+        this.ctx.fillText('✨ Cào tại đây ✨', 160, 100);
+        this.ctx.font = '14px Outfit,sans-serif';
+        this.ctx.fillStyle = 'rgba(255,215,0,0.8)';
+        this.ctx.fillText('Khám phá quà tặng may mắn', 160, 130);
+
+        this.ctx.globalCompositeOperation = 'destination-out';
+        this.ctx.lineJoin = 'round';
+        this.ctx.lineCap = 'round';
+        this.ctx.lineWidth = 45;
+
+        let lastX = null, lastY = null;
+        let drawing = false;
+
+        const draw = (x, y) => {
+            if (!drawing) return;
+            this.ctx.beginPath();
+            if (lastX !== null) this.ctx.moveTo(lastX, lastY);
+            else this.ctx.moveTo(x, y);
+            this.ctx.lineTo(x, y);
+            this.ctx.stroke();
+            lastX = x; lastY = y;
+            this.checkReveal();
+        };
+
+        const onMove = (e) => {
+            if (!this.scratching) return;
+            e.preventDefault();
+            const r = this.canvas.getBoundingClientRect();
+            const touch = e.touches ? e.touches[0] : e;
+            const x = (touch.clientX - r.left) * (320 / r.width);
+            const y = (touch.clientY - r.top) * (220 / r.height);
+
+            requestAnimationFrame(() => draw(x, y));
+        };
+
+        this.canvas.onmousedown = this.canvas.ontouchstart = (e) => {
+            e.preventDefault();
+            this.scratching = true;
+            drawing = true;
+            lastX = null; lastY = null;
+            onMove(e);
+        };
+        this.canvas.onmousemove = this.canvas.ontouchmove = onMove;
+        this.canvas.onmouseup = this.canvas.ontouchend = () => {
+            this.scratching = false;
+            drawing = false;
+        };
+    },
+    init(prize) { this.prize = prize; this.revealed = false; this.renderGrid(); },
+    checkReveal() {
+        if (this.revealed) return;
+        const d = this.ctx.getImageData(0, 0, 320, 220).data; let t = 0, c = 0;
+        for (let i = 3; i < d.length; i += 16) { t++; if (d[i] === 0) c++; }
+        if (c / t > 0.5) {
+            this.revealed = true; this.ctx.clearRect(0, 0, 320, 220); Sound.play('win');
+            setTimeout(() => {
+                document.getElementById('scratch-overlay').classList.remove('active');
+                App.handlePrizeWon(this.prize);
+            }, 800);
+        }
+    },
+    reset() {
+        document.getElementById('scratch-overlay').classList.remove('active');
+        const cards = document.querySelectorAll('.scratch-card-item');
+        cards.forEach(c => { c.classList.remove('disabled', 'selected'); });
+    }
+};
+
 const App = {
-    currentRoom: null, currentPlayer: null, currentUser: null, selectedMode: 'wheel', dashboardListener: null,
+    currentRoom: null, currentPlayer: null, currentUser: null, selectedMode: 'wheel', dashboardListener: null, settingsPrizes: [], _lastPlayerCount: 0,
     defaultPrizes: [
         { name: '10,000d', weight: 30, value: 10000 }, { name: '20,000d', weight: 25, value: 20000 },
         { name: '50,000d', weight: 15, value: 50000 }, { name: '100,000d', weight: 8, value: 100000 },
@@ -139,6 +262,22 @@ const App = {
         this.bindEvents();
         this.initAuth();
         this.restoreState();
+        this.handleDeepLink();
+        this.restorePreferences();
+    },
+    handleDeepLink() {
+        const p = new URLSearchParams(window.location.search);
+        const rc = p.get('room');
+        if (rc && rc.length === 6) {
+            const ci = document.getElementById('player-room-code');
+            if (ci) ci.value = rc;
+            this._deepLinkRoom = rc;
+        }
+    },
+    isRoomExpired(r) {
+        if (!r.timerHours || r.timerHours === 0) return false;
+        const created = new Date(r.createdAt).getTime();
+        return Date.now() > created + r.timerHours * 3600000;
     },
     async restoreState() {
         const s = State.load();
@@ -148,7 +287,7 @@ const App = {
                 this.currentRoom = r;
                 if (s.player) {
                     this.currentPlayer = s.player;
-                    if (r.mode === 'wheel') this.startWheelGame(); else this.startEnvelopeGame();
+                    if (r.mode === 'wheel') this.startWheelGame(); else if (r.mode === 'scratch') this.startScratchGame(); else this.startEnvelopeGame();
                 } else {
                     this.showDashboard();
                 }
@@ -168,6 +307,17 @@ const App = {
         on('btn-register', () => this.registerEmail());
         on('btn-google', () => this.loginGoogle());
         on('btn-logout', () => this.logout());
+        on('btn-guest-play', () => this.guestPlay());
+
+        const qrInput = $('bank-qr-upload');
+        if (qrInput) qrInput.addEventListener('change', (e) => this.handleQRUpload(e));
+
+        on('btn-remove-qr', () => {
+            $('bank-qr-upload').value = '';
+            $('qr-preview-wrapper').style.display = 'none';
+            $('qr-upload-label').style.display = 'flex';
+            this._uploadedQR = null;
+        });
 
         // Password live check
         const pwInput = $('register-password');
@@ -177,6 +327,14 @@ const App = {
         on('btn-role-host', () => this.showScreen('screen-host-create'));
         on('btn-role-player', () => this.showScreen('screen-player-join'));
         on('btn-history', () => this.showScreen('screen-history'));
+        on('btn-my-stats', () => { this.showScreen('screen-stats'); this.renderPersonalStats(); });
+        on('back-stats', () => this.showScreen('screen-home'));
+
+        // Theme + Music
+        const themeEl = document.getElementById('theme-selector');
+        if (themeEl) themeEl.addEventListener('change', () => this.applyTheme(themeEl.value));
+        const musicEl = document.getElementById('music-selector');
+        if (musicEl) musicEl.addEventListener('change', () => this.changeMusic(musicEl.value));
 
         // History
         on('back-history', () => this.showScreen('screen-home'));
@@ -187,19 +345,34 @@ const App = {
         on('back-host-create', () => this.showScreen('screen-home'));
         on('mode-wheel', () => this.selectMode('wheel'));
         on('mode-envelope', () => this.selectMode('envelope'));
+        on('mode-scratch', () => this.selectMode('scratch'));
         on('btn-add-prize', () => this.addPrize());
         on('btn-equal-prize', () => this.equalPrizes());
         on('btn-create-room', () => this.createRoom());
 
         // Dashboard
         on('btn-copy-code', () => this.copyRoomCode());
+        on('btn-show-qr', () => this.showQRCode());
+        on('btn-share-room', () => this.shareRoom());
+        on('btn-share-native', () => this.shareRoom());
+        on('btn-qr-close', () => { document.getElementById('qr-modal').classList.remove('active'); });
         on('dtab-btn-players', () => this.switchTab('tab-players', $('dtab-btn-players')));
+        on('dtab-btn-leaderboard', () => this.switchTab('tab-leaderboard', $('dtab-btn-leaderboard')));
         on('dtab-btn-history', () => this.switchTab('tab-history', $('dtab-btn-history')));
         on('dtab-btn-settings', () => this.switchTab('tab-settings', $('dtab-btn-settings')));
         on('btn-toggle-room', () => this.toggleRoom());
         on('btn-reset-room', () => this.resetRoom());
         on('btn-delete-room', () => this.deleteRoom());
         on('btn-dashboard-home', () => this.showScreen('screen-home'));
+        on('btn-export-csv', () => this.exportCSV());
+
+        // Settings
+        on('settings-mode-wheel', () => this.selectSettingsMode('wheel'));
+        on('settings-mode-envelope', () => this.selectSettingsMode('envelope'));
+        on('settings-mode-scratch', () => this.selectSettingsMode('scratch'));
+        on('settings-btn-add-prize', () => this.addSettingsPrize());
+        on('settings-btn-equal-prize', () => this.equalSettingsPrizes());
+        on('btn-save-settings', () => this.saveSettings());
 
         // Player join
         on('back-player-join', () => this.showScreen('screen-home'));
@@ -208,23 +381,30 @@ const App = {
         // Games
         on('back-wheel', () => this.leaveGame());
         on('back-envelope', () => this.leaveGame());
+        on('back-scratch', () => this.leaveGame());
         on('spinBtn', () => this.spinWheel());
         on('wheelCenterBtn', () => this.spinWheel());
         on('btn-play-again', () => this.playAgain());
         on('btn-leave-result', () => this.leaveGame());
+        on('btn-send-bank-info', () => this.sendBankInfo());
+
+        // QR modal close on overlay click
+        document.getElementById('qr-modal').addEventListener('click', (e) => { if (e.target.id === 'qr-modal') e.target.classList.remove('active'); });
     },
 
     // ==================== AUTH ====================
     initAuth() {
         auth.onAuthStateChanged(async (user) => {
             if (user) {
-                this.currentUser = user; this.updateUserBar(user);
+                this.currentUser = user; this._isGuest = false; this.updateUserBar(user);
                 const state = State.load();
                 if (state && state.screen && state.screen !== 'screen-auth') await this.restoreState(state);
                 else this.showScreen('screen-home', true);
             } else {
-                this.currentUser = null; this.currentRoom = null; this.currentPlayer = null;
-                State.clear(); this.showScreen('screen-auth', true);
+                if (!this._isGuest) {
+                    this.currentUser = null; this.currentRoom = null; this.currentPlayer = null;
+                    State.clear(); this.showScreen('screen-auth', true);
+                }
             }
         });
     },
@@ -233,10 +413,27 @@ const App = {
         const n = document.getElementById('user-display-name');
         const e = document.getElementById('user-email-display');
         const a = document.getElementById('user-avatar');
+        const bar = document.getElementById('user-bar');
+        if (this._isGuest) {
+            n.textContent = '👻 Khách';
+            e.textContent = 'Chơi ẩn danh';
+            a.textContent = '👻'; a.style.fontSize = '1.2rem';
+            if (bar) bar.style.display = 'flex';
+            return;
+        }
+        if (bar) bar.style.display = 'flex';
         n.textContent = user.displayName || user.email.split('@')[0];
         e.textContent = user.email;
         if (user.photoURL) { a.innerHTML = '<img src="' + user.photoURL + '" alt="Avatar">'; }
         else { a.textContent = (user.displayName || user.email)[0].toUpperCase(); a.style.fontSize = '1.2rem'; a.style.fontWeight = '800'; a.style.color = '#1a0505'; }
+    },
+
+    guestPlay() {
+        this._isGuest = true;
+        this.currentUser = null;
+        this.updateUserBar(null);
+        this.showScreen('screen-player-join');
+        Sound.play('click');
     },
 
     switchAuthTab(tabId, btnEl) {
@@ -325,10 +522,109 @@ const App = {
     },
 
     async logout() {
+        if (this._isGuest) {
+            this._isGuest = false; this.currentRoom = null; this.currentPlayer = null; State.clear();
+            this.showScreen('screen-auth', true); return;
+        }
         if (!confirm('Bạn có chắc muốn đăng xuất?')) return;
         if (this.dashboardListener) { Storage.offRoomChange(this.dashboardListener); this.dashboardListener = null; }
         this.currentRoom = null; this.currentPlayer = null; State.clear();
         await auth.signOut(); this.showToast('Đã đăng xuất');
+    },
+
+    applyTheme(name) {
+        const themes = {
+            classic: {
+                '--red-50': '#fff5f5', '--red-100': '#ffe3e3', '--red-200': '#ffc9c9', '--red-300': '#ff8787', '--red-400': '#ff4d4d', '--red-500': '#e03131', '--red-600': '#c92a2a', '--red-700': '#a61e1e', '--red-800': '#841919', '--red-900': '#5c0d0d',
+                '--gold-50': '#fffbeb', '--gold-100': '#fef3c7', '--gold-200': '#fde68a', '--gold-300': '#fcd34d', '--gold-400': '#fbbf24', '--gold-500': '#f59e0b', '--gold-600': '#d97706', '--gold-700': '#b45309',
+                '--bg-primary': '#1a0505', '--bg-card': 'rgba(139,0,0,0.25)', '--bg-glass': 'rgba(255,255,255,0.08)', '--bg-glass-strong': 'rgba(255,255,255,0.15)',
+                '--text-primary': '#fff5f5', '--text-secondary': '#fcd34d', '--text-muted': 'rgba(255,245,245,0.6)',
+                '--border-glow': 'rgba(251,191,36,0.3)', '--shadow-gold': '0 0 30px rgba(251,191,36,0.2)', '--shadow-red': '0 0 30px rgba(224,49,49,0.3)',
+                '--gradient-bg': 'radial-gradient(ellipse at top,#3d0c0c 0%,#1a0505 50%,#0d0202 100%)',
+                '--gradient-red': 'linear-gradient(135deg,#e03131,#c92a2a)', '--gradient-gold': 'linear-gradient(135deg,#fbbf24,#f59e0b,#d97706)',
+                '--gradient-card': 'linear-gradient(145deg,rgba(200,40,40,0.3),rgba(139,0,0,0.15))',
+                '--gradient-button': 'linear-gradient(135deg,#fbbf24,#f59e0b)', '--gradient-button-red': 'linear-gradient(135deg,#e03131,#c92a2a)',
+                '--glow-primary': '251,191,36', '--glow-accent': '224,49,49', '--btn-gold-text': '#1a0505'
+            },
+            jade: {
+                '--red-50': '#ecfdf5', '--red-100': '#d1fae5', '--red-200': '#a7f3d0', '--red-300': '#6ee7b7', '--red-400': '#34d399', '--red-500': '#10b981', '--red-600': '#059669', '--red-700': '#047857', '--red-800': '#065f46', '--red-900': '#064e3b',
+                '--gold-50': '#ecfdf5', '--gold-100': '#d1fae5', '--gold-200': '#a7f3d0', '--gold-300': '#6ee7b7', '--gold-400': '#34d399', '--gold-500': '#10b981', '--gold-600': '#059669', '--gold-700': '#047857',
+                '--bg-primary': '#021a12', '--bg-card': 'rgba(0,100,60,0.2)', '--bg-glass': 'rgba(200,255,230,0.06)', '--bg-glass-strong': 'rgba(200,255,230,0.12)',
+                '--text-primary': '#ecfdf5', '--text-secondary': '#6ee7b7', '--text-muted': 'rgba(236,253,245,0.55)',
+                '--border-glow': 'rgba(52,211,153,0.35)', '--shadow-gold': '0 0 30px rgba(52,211,153,0.2)', '--shadow-red': '0 0 30px rgba(16,185,129,0.3)',
+                '--gradient-bg': 'radial-gradient(ellipse at top,#0a2e1f 0%,#021a12 50%,#010d09 100%)',
+                '--gradient-red': 'linear-gradient(135deg,#10b981,#059669)', '--gradient-gold': 'linear-gradient(135deg,#34d399,#10b981,#059669)',
+                '--gradient-card': 'linear-gradient(145deg,rgba(16,185,129,0.2),rgba(0,100,60,0.1))',
+                '--gradient-button': 'linear-gradient(135deg,#34d399,#10b981)', '--gradient-button-red': 'linear-gradient(135deg,#10b981,#059669)',
+                '--glow-primary': '52,211,153', '--glow-accent': '16,185,129', '--btn-gold-text': '#021a12'
+            },
+            sakura: {
+                '--red-50': '#fdf2f8', '--red-100': '#fce7f3', '--red-200': '#fbcfe8', '--red-300': '#f9a8d4', '--red-400': '#f472b6', '--red-500': '#ec4899', '--red-600': '#db2777', '--red-700': '#be185d', '--red-800': '#9d174d', '--red-900': '#831843',
+                '--gold-50': '#fdf2f8', '--gold-100': '#fce7f3', '--gold-200': '#fbcfe8', '--gold-300': '#f9a8d4', '--gold-400': '#f472b6', '--gold-500': '#ec4899', '--gold-600': '#db2777', '--gold-700': '#be185d',
+                '--bg-primary': '#1a0a14', '--bg-card': 'rgba(150,0,80,0.2)', '--bg-glass': 'rgba(255,200,230,0.06)', '--bg-glass-strong': 'rgba(255,200,230,0.12)',
+                '--text-primary': '#fdf2f8', '--text-secondary': '#f9a8d4', '--text-muted': 'rgba(253,242,248,0.55)',
+                '--border-glow': 'rgba(244,114,182,0.35)', '--shadow-gold': '0 0 30px rgba(244,114,182,0.2)', '--shadow-red': '0 0 30px rgba(236,72,153,0.3)',
+                '--gradient-bg': 'radial-gradient(ellipse at top,#3d0c28 0%,#1a0a14 50%,#0d050a 100%)',
+                '--gradient-red': 'linear-gradient(135deg,#ec4899,#db2777)', '--gradient-gold': 'linear-gradient(135deg,#f472b6,#ec4899,#db2777)',
+                '--gradient-card': 'linear-gradient(145deg,rgba(236,72,153,0.2),rgba(150,0,80,0.1))',
+                '--gradient-button': 'linear-gradient(135deg,#f472b6,#ec4899)', '--gradient-button-red': 'linear-gradient(135deg,#ec4899,#db2777)',
+                '--glow-primary': '244,114,182', '--glow-accent': '236,72,153', '--btn-gold-text': '#1a0a14'
+            },
+            royal: {
+                '--red-50': '#f5f3ff', '--red-100': '#ede9fe', '--red-200': '#ddd6fe', '--red-300': '#c4b5fd', '--red-400': '#a78bfa', '--red-500': '#8b5cf6', '--red-600': '#7c3aed', '--red-700': '#6d28d9', '--red-800': '#5b21b6', '--red-900': '#4c1d95',
+                '--gold-50': '#f5f3ff', '--gold-100': '#ede9fe', '--gold-200': '#ddd6fe', '--gold-300': '#c4b5fd', '--gold-400': '#a78bfa', '--gold-500': '#8b5cf6', '--gold-600': '#7c3aed', '--gold-700': '#6d28d9',
+                '--bg-primary': '#0c0820', '--bg-card': 'rgba(80,0,180,0.18)', '--bg-glass': 'rgba(200,180,255,0.06)', '--bg-glass-strong': 'rgba(200,180,255,0.12)',
+                '--text-primary': '#f5f3ff', '--text-secondary': '#c4b5fd', '--text-muted': 'rgba(245,243,255,0.55)',
+                '--border-glow': 'rgba(167,139,250,0.35)', '--shadow-gold': '0 0 30px rgba(167,139,250,0.2)', '--shadow-red': '0 0 30px rgba(139,92,246,0.3)',
+                '--gradient-bg': 'radial-gradient(ellipse at top,#1e1050 0%,#0c0820 50%,#06040f 100%)',
+                '--gradient-red': 'linear-gradient(135deg,#8b5cf6,#7c3aed)', '--gradient-gold': 'linear-gradient(135deg,#a78bfa,#8b5cf6,#7c3aed)',
+                '--gradient-card': 'linear-gradient(145deg,rgba(139,92,246,0.2),rgba(80,0,180,0.1))',
+                '--gradient-button': 'linear-gradient(135deg,#a78bfa,#8b5cf6)', '--gradient-button-red': 'linear-gradient(135deg,#8b5cf6,#7c3aed)',
+                '--glow-primary': '167,139,250', '--glow-accent': '139,92,246', '--btn-gold-text': '#0c0820'
+            },
+            midnight: {
+                '--red-50': '#eff6ff', '--red-100': '#dbeafe', '--red-200': '#bfdbfe', '--red-300': '#93c5fd', '--red-400': '#60a5fa', '--red-500': '#3b82f6', '--red-600': '#2563eb', '--red-700': '#1d4ed8', '--red-800': '#1e40af', '--red-900': '#1e3a8a',
+                '--gold-50': '#eff6ff', '--gold-100': '#dbeafe', '--gold-200': '#bfdbfe', '--gold-300': '#93c5fd', '--gold-400': '#60a5fa', '--gold-500': '#3b82f6', '--gold-600': '#2563eb', '--gold-700': '#1d4ed8',
+                '--bg-primary': '#080e1e', '--bg-card': 'rgba(0,40,120,0.2)', '--bg-glass': 'rgba(180,210,255,0.06)', '--bg-glass-strong': 'rgba(180,210,255,0.12)',
+                '--text-primary': '#eff6ff', '--text-secondary': '#93c5fd', '--text-muted': 'rgba(239,246,255,0.55)',
+                '--border-glow': 'rgba(96,165,250,0.35)', '--shadow-gold': '0 0 30px rgba(96,165,250,0.2)', '--shadow-red': '0 0 30px rgba(59,130,246,0.3)',
+                '--gradient-bg': 'radial-gradient(ellipse at top,#0f1b3d 0%,#080e1e 50%,#04070f 100%)',
+                '--gradient-red': 'linear-gradient(135deg,#3b82f6,#2563eb)', '--gradient-gold': 'linear-gradient(135deg,#60a5fa,#3b82f6,#2563eb)',
+                '--gradient-card': 'linear-gradient(145deg,rgba(59,130,246,0.2),rgba(0,40,120,0.1))',
+                '--gradient-button': 'linear-gradient(135deg,#60a5fa,#3b82f6)', '--gradient-button-red': 'linear-gradient(135deg,#3b82f6,#2563eb)',
+                '--glow-primary': '96,165,250', '--glow-accent': '59,130,246', '--btn-gold-text': '#080e1e'
+            }
+        };
+        const t = themes[name] || themes.classic;
+        Object.entries(t).forEach(([k, v]) => document.documentElement.style.setProperty(k, v));
+        // Also set body background
+        document.body.style.background = t['--gradient-bg'];
+        localStorage.setItem('lixi-theme', name);
+        Sound.play('click');
+    },
+    changeMusic(src) {
+        const audio = document.getElementById('bgMusic');
+        if (!audio) return;
+        const playing = !audio.paused;
+        audio.src = src;
+        if (playing) audio.play().catch(() => { });
+        localStorage.setItem('lixi-music', src);
+        Sound.play('click');
+    },
+    restorePreferences() {
+        const theme = localStorage.getItem('lixi-theme');
+        if (theme && theme !== 'classic') {
+            this.applyTheme(theme);
+            const sel = document.getElementById('theme-selector');
+            if (sel) sel.value = theme;
+        }
+        const music = localStorage.getItem('lixi-music');
+        if (music) {
+            const audio = document.getElementById('bgMusic');
+            if (audio) audio.src = music;
+            const sel = document.getElementById('music-selector');
+            if (sel) sel.value = music;
+        }
     },
 
     // ==================== STATE ====================
@@ -355,22 +651,30 @@ const App = {
         document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
         const t = document.getElementById(id); if (t) { t.classList.add('active'); t.style.animation = 'none'; t.offsetHeight; t.style.animation = ''; }
         if (!skip) this.persistState(id);
-        if (id === 'screen-home') { this.currentRoom = null; this.currentPlayer = null; State.clear(); }
+        if (id === 'screen-home') {
+            if (this._isGuest) { this._isGuest = false; this.currentRoom = null; this.currentPlayer = null; State.clear(); this.showScreen('screen-auth', true); return; }
+            this.currentRoom = null; this.currentPlayer = null; State.clear();
+        }
         if (id === 'screen-history') this.renderHistoryScreen();
-        if (id === 'screen-player-join' && this.currentUser) { const ni = document.getElementById('player-name'); if (!ni.value) ni.value = this.currentUser.displayName || ''; }
+        if (id === 'screen-player-join') {
+            if (this.currentUser) { const ni = document.getElementById('player-name'); if (!ni.value) ni.value = this.currentUser.displayName || ''; }
+            if (this._deepLinkRoom) { document.getElementById('player-room-code').value = this._deepLinkRoom; this._deepLinkRoom = null; }
+        }
         Sound.play('click');
     },
     showToast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(this._toastTimer); this._toastTimer = setTimeout(() => t.classList.remove('show'), 5000); },
 
     // ==================== MODE / PRIZE ====================
     selectMode(m) { this.selectedMode = m; document.querySelectorAll('.mode-card').forEach(c => c.classList.remove('selected')); document.getElementById('mode-' + m).classList.add('selected'); Sound.play('click'); },
-    renderPrizeList(prizes) {
-        const c = document.getElementById('prize-list'); c.innerHTML = '';
+    renderPrizeList(prizes, containerId, dataArray) {
+        containerId = containerId || 'prize-list';
+        dataArray = dataArray || 'defaultPrizes';
+        const c = document.getElementById(containerId); c.innerHTML = '';
         prizes.forEach((p, i) => {
             const item = document.createElement('div'); item.className = 'prize-item';
-            const n = document.createElement('input'); n.className = 'input-field'; n.type = 'text'; n.value = p.name; n.placeholder = 'Tên giải'; n.addEventListener('change', () => { this.defaultPrizes[i].name = n.value; });
-            const w = document.createElement('input'); w.className = 'input-field'; w.type = 'number'; w.value = p.weight; w.min = '0.01'; w.max = '100'; w.step = 'any'; w.placeholder = '%'; w.addEventListener('change', () => { this.defaultPrizes[i].weight = parseFloat(w.value) || 1; });
-            const d = document.createElement('button'); d.className = 'btn btn-icon'; d.textContent = '✕'; d.title = 'Xoá'; d.addEventListener('click', () => this.removePrize(i));
+            const n = document.createElement('input'); n.className = 'input-field'; n.type = 'text'; n.value = p.name; n.placeholder = 'Tên giải'; n.addEventListener('change', () => { this[dataArray][i].name = n.value; });
+            const w = document.createElement('input'); w.className = 'input-field'; w.type = 'number'; w.value = p.weight; w.min = '0.01'; w.max = '100'; w.step = 'any'; w.placeholder = '%'; w.addEventListener('change', () => { this[dataArray][i].weight = parseFloat(w.value) || 1; });
+            const d = document.createElement('button'); d.className = 'btn btn-icon'; d.textContent = '✕'; d.title = 'Xoá'; d.addEventListener('click', () => { if (dataArray === 'settingsPrizes') this.removeSettingsPrize(i); else this.removePrize(i); });
             item.appendChild(n); item.appendChild(w); item.appendChild(d); c.appendChild(item);
         });
     },
@@ -383,11 +687,14 @@ const App = {
         const name = document.getElementById('host-room-name').value.trim();
         if (!name) { this.showToast('Vui lòng nhập tên phòng'); Sound.play('error'); return; }
         const prizes = [];
-        document.querySelectorAll('.prize-item').forEach(item => { const inp = item.querySelectorAll('.input-field'); const pn = inp[0].value.trim(), pw = parseInt(inp[1].value) || 10; if (pn) { const m = pn.replace(/[,\.]/g, '').match(/(\d+)/); prizes.push({ name: pn, weight: pw, value: m ? parseInt(m[1]) : 0 }); } });
+        document.querySelectorAll('#prize-list .prize-item').forEach(item => { const inp = item.querySelectorAll('.input-field'); const pn = inp[0].value.trim(), pw = parseInt(inp[1].value) || 10; if (pn) { const m = pn.replace(/[,\.]/g, '').match(/(\d+)/); prizes.push({ name: pn, weight: pw, value: m ? parseInt(m[1]) : 0 }); } });
         if (prizes.length < 2) { this.showToast('Cần ít nhất 2 giải'); Sound.play('error'); return; }
         const mt = parseInt(document.getElementById('host-max-turns').value) || 1;
+        const removePrizeOnWin = document.getElementById('host-remove-prize').checked;
+        const greeting = (document.getElementById('host-greeting').value || '').trim();
+        const timerHours = parseInt(document.getElementById('host-timer').value) || 0;
         const code = Math.floor(100000 + Math.random() * 900000).toString();
-        const room = { code, name, mode: this.selectedMode, prizes, maxTurns: mt, isOpen: true, players: [], history: [], createdAt: new Date().toISOString(), ownerId: this.currentUser.uid };
+        const room = { code, name, mode: this.selectedMode, prizes, maxTurns: mt, removePrizeOnWin, greeting, timerHours, isOpen: true, players: [], history: [], createdAt: new Date().toISOString(), ownerId: this.currentUser.uid };
         this.showToast('Đang tạo phòng...');
         await Storage.saveRoom(code, room); await Storage.saveCreatedRoom(this.currentUser.uid, code, name);
         this.currentRoom = room; Sound.play('win'); this.showDashboard();
@@ -404,6 +711,27 @@ const App = {
     },
     refreshDashboard(r) {
         const pl = r.players || [], h = r.history || [];
+        // Host notification: new player joined
+        if (this._lastPlayerCount > 0 && pl.length > this._lastPlayerCount) {
+            const newest = pl[pl.length - 1];
+            this.showToast('\ud83d\udc64 ' + (newest.name || 'Ai đó') + ' vừa tham gia!');
+            Sound.play('click');
+        }
+        this._lastPlayerCount = pl.length;
+        // Host notification: big win
+        if (h.length > 0) {
+            const last = h[h.length - 1];
+            if (this._lastHistoryLen && h.length > this._lastHistoryLen && (last.value || 0) >= 100000) {
+                this.showToast('\ud83c\udf86 ' + this.esc(last.playerName) + ' trúng JACKPOT: ' + this.esc(last.prizeName) + '!');
+                Sound.play('bigwin');
+            }
+        }
+        this._lastHistoryLen = h.length;
+        // Check expiry
+        if (this.isRoomExpired(r) && r.isOpen) {
+            r.isOpen = false; Storage.saveRoom(r.code, r);
+            this.showToast('\u23f0 Phòng đã hết hạn và tự động khóa!');
+        }
         document.getElementById('stat-players').textContent = pl.length;
         document.getElementById('stat-played').textContent = h.length;
         document.getElementById('stat-total').textContent = this.formatMoney(h.reduce((s, x) => s + (x.value > 0 ? x.value : 0), 0));
@@ -412,8 +740,28 @@ const App = {
         else { pe.style.display = 'none'; ptb.innerHTML = pl.map((p, i) => { const tu = h.filter(x => x.playerName === p.name).length, tl = r.maxTurns - tu; return '<tr><td>' + (i + 1) + '</td><td>' + this.esc(p.name) + '</td><td>' + tl + '/' + r.maxTurns + '</td><td>' + (tl > 0 ? '<span class="badge badge-green">Chưa hết</span>' : '<span class="badge badge-red">Hết lượt</span>') + '</td></tr>'; }).join(''); }
         const htb = document.getElementById('history-tbody'), he = document.getElementById('history-empty');
         if (!h.length) { htb.innerHTML = ''; he.style.display = 'block'; }
-        else { he.style.display = 'none'; htb.innerHTML = h.slice().reverse().map(x => { const t = new Date(x.time).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }); return '<tr><td>' + this.esc(x.playerName) + '</td><td><span class="badge ' + (x.value > 100000 ? 'badge-gold' : 'badge-green') + '">' + this.esc(x.prizeName) + '</span></td><td>' + t + '</td></tr>'; }).join(''); }
+        else {
+            he.style.display = 'none';
+            const bankMap = {}; r.bankInfos?.forEach(b => bankMap[b.playerName] = b);
+            htb.innerHTML = h.slice().reverse().map(x => {
+                const t = new Date(x.time).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+                const b = bankMap[x.playerName];
+                let payInfo = '<span class="text-muted" style="font-size:0.7rem">N/A</span>';
+                if (b) {
+                    payInfo = `<button class="view-qr-btn" onclick="App.showPaymentDetail('${this.esc(x.playerName)}')">💳 Xem</button>`;
+                }
+                return `<tr>
+                    <td>${this.esc(x.playerName)}</td>
+                    <td><span class="badge ${x.value > 100000 ? 'badge-gold' : 'badge-green'}">${this.esc(x.prizeName)}</span></td>
+                    <td>${payInfo}</td>
+                    <td style="font-size:0.75rem">${t}</td>
+                </tr>`;
+            }).join('');
+        }
         this.updateRoomStatusUI(r);
+        this.populateSettings(r);
+        this.renderLeaderboard(r);
+        this.renderBankInfos(r);
     },
     updateRoomStatusUI(r) {
         const s = document.getElementById('room-status'), t = document.getElementById('room-status-text'), b = document.getElementById('btn-toggle-room');
@@ -430,6 +778,123 @@ const App = {
     async resetRoom() { if (!this.currentRoom || !confirm('Reset phòng?')) return; this.currentRoom.players = []; this.currentRoom.history = []; await Storage.saveRoom(this.currentRoom.code, this.currentRoom); this.showToast('Đã reset phòng'); Sound.play('click'); },
     async deleteRoom() { if (!this.currentRoom || !confirm('Xoá phòng vĩnh viễn?')) return; Storage.offRoomChange(this.currentRoom.code); this.dashboardListener = null; await Storage.deleteRoom(this.currentRoom.code); this.currentRoom = null; State.clear(); this.showScreen('screen-home'); this.showToast('Đã xoá phòng'); },
     copyRoomCode() { if (!this.currentRoom) return; navigator.clipboard.writeText(this.currentRoom.code).then(() => this.showToast('Đã sao chép: ' + this.currentRoom.code)).catch(() => this.showToast('Mã: ' + this.currentRoom.code)); Sound.play('click'); },
+    getRoomURL() { const base = window.location.origin + window.location.pathname; return base + '?room=' + this.currentRoom.code; },
+    showQRCode() {
+        if (!this.currentRoom) return;
+        const container = document.getElementById('qr-code'); container.innerHTML = '';
+        if (typeof QRCode !== 'undefined') {
+            QRCode.toCanvas(this.getRoomURL(), { width: 200, margin: 2, color: { dark: '#1a0505', light: '#fff8e1' } }, (err, canvas) => { if (!err) container.appendChild(canvas); });
+        } else { container.innerHTML = '<p class="text-muted">Không thể tạo QR. Mã phòng: ' + this.currentRoom.code + '</p>'; }
+        document.getElementById('qr-modal').classList.add('active'); Sound.play('click');
+    },
+    async shareRoom() {
+        if (!this.currentRoom) return;
+        const url = this.getRoomURL();
+        const text = '\ud83e\udde7 Tham gia phòng Lì Xì "' + this.currentRoom.name + '"! Mã: ' + this.currentRoom.code;
+        if (navigator.share) { try { await navigator.share({ title: 'Lì Xì May Mắn', text, url }); } catch (e) { } }
+        else { navigator.clipboard.writeText(text + '\n' + url).then(() => this.showToast('Đã sao chép link!')).catch(() => { }); }
+        Sound.play('click');
+    },
+    renderLeaderboard(r) {
+        const h = r.history || [], ll = document.getElementById('leaderboard-list'), le = document.getElementById('leaderboard-empty');
+        if (!h.length) { ll.innerHTML = ''; le.style.display = 'block'; return; }
+        le.style.display = 'none';
+        const map = {}; h.forEach(x => { if (!map[x.playerName]) map[x.playerName] = { total: 0, count: 0 }; map[x.playerName].total += (x.value > 0 ? x.value : 0); map[x.playerName].count++; });
+        const sorted = Object.entries(map).sort((a, b) => b[1].total - a[1].total);
+        const medals = ['\ud83e\udd47', '\ud83e\udd48', '\ud83e\udd49'];
+        ll.innerHTML = sorted.map(([name, d], i) => '<div class="leaderboard-item' + (i < 3 ? ' top-' + (i + 1) : '') + '"><span class="lb-rank">' + (medals[i] || (i + 1)) + '</span><span class="lb-name">' + this.esc(name) + '</span><span class="lb-value">' + this.formatMoney(d.total) + ' (' + d.count + ' lượt)</span></div>').join('');
+    },
+    renderBankInfos(r) {
+        const viewer = document.getElementById('bank-info-viewer');
+        const infos = r.bankInfos || [];
+        if (!infos.length) { viewer.innerHTML = ''; return; }
+        viewer.innerHTML = '<div class="bank-info-header" style="margin-bottom:10px">🏦 Thông tin ngân hàng người trúng (' + infos.length + ')</div>' +
+            infos.map(b => '<div class="bank-entry"><div class="bank-entry-name">' + this.esc(b.playerName) + '</div><div class="bank-entry-details">' +
+                '<div>🏦 ' + this.esc(b.bankName) + '</div>' +
+                '<div>💳 STK: <strong>' + this.esc(b.bankAccount) + '</strong></div>' +
+                '<div>👤 ' + this.esc(b.bankHolder) + '</div>' +
+                (b.qrImage ? '<img src="' + b.qrImage + '" class="bank-qr-img" alt="QR">' : '') +
+                '</div></div>').join('');
+    },
+    exportCSV() {
+        if (!this.currentRoom || !this.currentRoom.history || !this.currentRoom.history.length) { this.showToast('Không có dữ liệu'); return; }
+        const rows = [['Tên', 'Giải thưởng', 'Giá trị', 'Thời gian']];
+        this.currentRoom.history.forEach(h => rows.push([h.playerName, h.prizeName, h.value || 0, h.time]));
+        const csv = rows.map(r => r.map(c => '"' + String(c).replace(/"/g, '""') + '"').join(',')).join('\n');
+        const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+        a.download = 'lixi_' + this.currentRoom.code + '.csv'; a.click();
+        this.showToast('\u0110\u00e3 xuất CSV!'); Sound.play('click');
+    },
+    async renderPersonalStats() {
+        if (!this.currentUser) return;
+        const hist = await Storage.getUserHistory(this.currentUser.uid);
+        const joined = Storage.ensureArray(hist.joined);
+        let totalWins = 0, totalValue = 0, bestPrize = null, bestValue = 0;
+        joined.forEach(rj => { const w = rj.wins || []; totalWins += w.length; w.forEach(win => { const v = win.value || 0; totalValue += v; if (v > bestValue) { bestValue = v; bestPrize = win.prizeName; } }); });
+        document.getElementById('ps-rooms').textContent = joined.length;
+        document.getElementById('ps-wins').textContent = totalWins;
+        document.getElementById('ps-total').textContent = this.formatMoney(totalValue);
+        document.getElementById('ps-best').textContent = bestPrize ? bestPrize + ' (' + this.formatMoney(bestValue) + ')' : 'Chưa có dữ liệu';
+    },
+
+    // ==================== SETTINGS ====================
+    populateSettings(r) {
+        if (!r) return;
+        const nameInput = document.getElementById('settings-room-name');
+        const turnsInput = document.getElementById('settings-max-turns');
+        if (nameInput) nameInput.value = r.name || '';
+        if (turnsInput) turnsInput.value = r.maxTurns || 1;
+        const rpToggle = document.getElementById('settings-remove-prize');
+        if (rpToggle) rpToggle.checked = !!r.removePrizeOnWin;
+        const greetInput = document.getElementById('settings-greeting');
+        if (greetInput) greetInput.value = r.greeting || '';
+        const timerInput = document.getElementById('settings-timer');
+        if (timerInput) timerInput.value = r.timerHours || 0;
+        document.querySelectorAll('#tab-settings .mode-card').forEach(c => c.classList.remove('selected'));
+        const modeEl = document.getElementById('settings-mode-' + (r.mode || 'wheel'));
+        if (modeEl) modeEl.classList.add('selected');
+        this.settingsPrizes = (r.prizes || []).map(p => ({ name: p.name, weight: p.weight, value: p.value || 0 }));
+        this.renderPrizeList(this.settingsPrizes, 'settings-prize-list', 'settingsPrizes');
+    },
+    selectSettingsMode(m) {
+        document.querySelectorAll('#tab-settings .mode-card').forEach(c => c.classList.remove('selected'));
+        const el = document.getElementById('settings-mode-' + m);
+        if (el) el.classList.add('selected');
+        Sound.play('click');
+    },
+    addSettingsPrize() { this.settingsPrizes.push({ name: 'Giải mới', weight: 10, value: 0 }); this.renderPrizeList(this.settingsPrizes, 'settings-prize-list', 'settingsPrizes'); Sound.play('click'); },
+    removeSettingsPrize(i) { if (this.settingsPrizes.length <= 2) { this.showToast('Cần ít nhất 2 giải'); Sound.play('error'); return; } this.settingsPrizes.splice(i, 1); this.renderPrizeList(this.settingsPrizes, 'settings-prize-list', 'settingsPrizes'); Sound.play('click'); },
+    equalSettingsPrizes() { const n = this.settingsPrizes.length; const w = parseFloat((100 / n).toFixed(2)); this.settingsPrizes.forEach(p => { p.weight = w; }); this.renderPrizeList(this.settingsPrizes, 'settings-prize-list', 'settingsPrizes'); this.showToast('Đã chia đều: ' + w + '% mỗi giải'); Sound.play('click'); },
+    async saveSettings() {
+        if (!this.currentRoom) return;
+        const name = document.getElementById('settings-room-name').value.trim();
+        if (!name) { this.showToast('Vui lòng nhập tên phòng'); Sound.play('error'); return; }
+        // Read prizes from settings prize list
+        const prizes = [];
+        document.querySelectorAll('#settings-prize-list .prize-item').forEach(item => {
+            const inp = item.querySelectorAll('.input-field');
+            const pn = inp[0].value.trim(), pw = parseFloat(inp[1].value) || 10;
+            if (pn) { const m = pn.replace(/[,\.]/g, '').match(/(\d+)/); prizes.push({ name: pn, weight: pw, value: m ? parseInt(m[1]) : 0 }); }
+        });
+        if (prizes.length < 2) { this.showToast('Cần ít nhất 2 giải'); Sound.play('error'); return; }
+        const mt = parseInt(document.getElementById('settings-max-turns').value) || 1;
+        // Determine selected mode
+        const modeEl = document.querySelector('#tab-settings .mode-card.selected');
+        const mode = modeEl && modeEl.id === 'settings-mode-envelope' ? 'envelope' : 'wheel';
+        // Update room
+        this.currentRoom.name = name;
+        this.currentRoom.mode = mode;
+        this.currentRoom.prizes = prizes;
+        this.currentRoom.maxTurns = mt;
+        this.currentRoom.removePrizeOnWin = document.getElementById('settings-remove-prize').checked;
+        this.currentRoom.greeting = (document.getElementById('settings-greeting').value || '').trim();
+        this.currentRoom.timerHours = parseInt(document.getElementById('settings-timer').value) || 0;
+        await Storage.saveRoom(this.currentRoom.code, this.currentRoom);
+        document.getElementById('dashboard-room-name').textContent = name;
+        this.showToast('Đã lưu thay đổi thành công! ✅');
+        Sound.play('win');
+    },
 
     // ==================== PLAYER ====================
     async joinRoom() {
@@ -439,12 +904,13 @@ const App = {
         this.showToast('Đang tìm phòng...');
         const r = await Storage.getRoom(code); if (!r) { this.showToast('Không tìm thấy phòng!'); Sound.play('error'); return; }
         if (!r.isOpen) { this.showToast('Phòng đã khoá'); Sound.play('error'); return; }
-        if (!r.players.find(p => p.name === name)) { r.players.push({ name, joinedAt: new Date().toISOString(), uid: this.currentUser.uid }); await Storage.saveRoom(code, r); }
+        if (this.isRoomExpired(r)) { this.showToast('Phòng đã hết hạn!'); Sound.play('error'); return; }
+        if (!r.players.find(p => p.name === name)) { r.players.push({ name, joinedAt: new Date().toISOString(), uid: this.currentUser ? this.currentUser.uid : null }); await Storage.saveRoom(code, r); }
         const tu = r.history.filter(h => h.playerName === name).length; if (tu >= r.maxTurns) { this.showToast('Bạn đã hết lượt!'); Sound.play('error'); return; }
         this.currentRoom = r; this.currentPlayer = name;
-        State.save({ code: r.code, player: name }); // Save Player State
+        State.save({ code: r.code, player: name });
         if (this.currentUser) await Storage.saveJoinedRoom(this.currentUser.uid, code, r.name, name);
-        if (r.mode === 'wheel') this.startWheelGame(); else this.startEnvelopeGame();
+        if (r.mode === 'wheel') this.startWheelGame(); else if (r.mode === 'scratch') this.startScratchGame(); else this.startEnvelopeGame();
     },
 
     // ==================== GAMES ====================
@@ -457,7 +923,9 @@ const App = {
     },
     async spinWheel() {
         if (Wheel.spinning) return; const r = await Storage.getRoom(this.currentRoom.code); if (!r) { this.showToast('Phòng không tồn tại'); return; }
-        this.currentRoom = r; const tu = r.history.filter(h => h.playerName === this.currentPlayer).length; if (tu >= r.maxTurns) { this.showToast('Hết lượt!'); Sound.play('error'); return; }
+        this.currentRoom = r;
+        if (!r.prizes || r.prizes.length === 0) { this.showToast('Đã hết giải thưởng!'); Sound.play('error'); return; }
+        const tu = r.history.filter(h => h.playerName === this.currentPlayer).length; if (tu >= r.maxTurns) { this.showToast('Hết lượt!'); Sound.play('error'); return; }
         document.getElementById('spinBtn').disabled = true; document.getElementById('wheelCenterBtn').style.pointerEvents = 'none';
         Wheel.spin(p => this.handlePrizeWon(p));
     },
@@ -478,15 +946,38 @@ const App = {
     async openEnvelope(idx) {
         const env = document.getElementById('envelope-' + idx); if (env.classList.contains('flipped') || env.classList.contains('disabled')) return;
         const r = await Storage.getRoom(this.currentRoom.code); if (!r) { this.showToast('Phòng không tồn tại'); return; }
-        this.currentRoom = r; const tu = r.history.filter(h => h.playerName === this.currentPlayer).length; if (tu >= r.maxTurns) { this.showToast('Hết lượt!'); Sound.play('error'); return; }
+        this.currentRoom = r;
+        if (!r.prizes || r.prizes.length === 0) { this.showToast('Đã hết giải thưởng!'); Sound.play('error'); return; }
+        const tu = r.history.filter(h => h.playerName === this.currentPlayer).length; if (tu >= r.maxTurns) { this.showToast('Hết lượt!'); Sound.play('error'); return; }
         const prize = r.prizes[this.getWeightedRandom(r.prizes)]; document.getElementById('env-prize-' + idx).textContent = prize.name;
         document.querySelectorAll('.envelope').forEach(e => { if (e.id !== 'envelope-' + idx) e.classList.add('disabled'); });
         Sound.play('flip'); env.classList.add('flipped'); setTimeout(() => this.handlePrizeWon(prize), 1200);
+    },
+    startScratchGame() {
+        ScratchCard.reset();
+        document.getElementById('scratch-player-name').textContent = this.currentPlayer;
+        const tu = (this.currentRoom.history || []).filter(h => h.playerName === this.currentPlayer).length;
+        document.getElementById('scratch-turns-left').innerHTML = 'Bạn còn <strong>' + (this.currentRoom.maxTurns - tu) + '</strong> lượt';
+        this.showScreen('screen-game-scratch');
+        this.playScratch();
+    },
+    async playScratch() {
+        const r = await Storage.getRoom(this.currentRoom.code); if (!r) { this.showToast('Phòng không tồn tại'); return; }
+        this.currentRoom = r;
+        if (!r.prizes || r.prizes.length === 0) { this.showToast('Đã hết giải thưởng!'); Sound.play('error'); return; }
+        const tu = r.history.filter(h => h.playerName === this.currentPlayer).length; if (tu >= r.maxTurns) { this.showToast('Hết lượt!'); Sound.play('error'); return; }
+        const prize = r.prizes[this.getWeightedRandom(r.prizes)];
+        ScratchCard.init(prize);
     },
 
     async handlePrizeWon(prize) {
         const r = await Storage.getRoom(this.currentRoom.code); if (!r) return; r.history = r.history || [];
         r.history.push({ playerName: this.currentPlayer, prizeName: prize.name, value: prize.value === -1 ? 0 : (prize.value || 0), time: new Date().toISOString(), uid: this.currentUser ? this.currentUser.uid : null });
+        // Remove prize from pool if enabled
+        if (r.removePrizeOnWin) {
+            const pi = r.prizes.findIndex(p => p.name === prize.name);
+            if (pi !== -1) r.prizes.splice(pi, 1);
+        }
         await Storage.saveRoom(r.code, r); this.currentRoom = r;
         if (this.currentUser) await Storage.saveWin(this.currentUser.uid, r.code, r.name, this.currentPlayer, prize.name, prize.value === -1 ? 0 : (prize.value || 0));
         const $ = id => document.getElementById(id), big = (prize.value || 0) >= 100000, luck = prize.value === 0 && prize.name.toLowerCase().includes('may man'), extra = prize.value === -1;
@@ -495,21 +986,88 @@ const App = {
         else if (big) { $('result-emoji').textContent = '🎆'; $('result-title').textContent = 'JACKPOT!'; $('result-prize').textContent = prize.name; $('result-message').textContent = 'Chúc mừng ' + this.currentPlayer + '! Trúng giải lớn!'; }
         else { $('result-emoji').textContent = '🎉'; $('result-title').textContent = 'Chúc mừng!'; $('result-prize').textContent = prize.name; $('result-message').textContent = this.currentPlayer + ' đã nhận được lì xì!'; }
         const tl = r.maxTurns - r.history.filter(h => h.playerName === this.currentPlayer).length, btn = $('btn-play-again');
-        if (tl > 0 || extra) { btn.style.display = 'inline-flex'; btn.textContent = '🔄 Chơi tiếp (còn ' + (extra ? tl + 1 : tl) + ' lượt)'; } else btn.style.display = 'none';
+        const noPrizes = r.removePrizeOnWin && (!r.prizes || r.prizes.length === 0);
+        if ((tl > 0 || extra) && !noPrizes) { btn.style.display = 'inline-flex'; btn.textContent = '🔄 Chơi tiếp (còn ' + (extra ? tl + 1 : tl) + ' lượt)'; } else btn.style.display = 'none';
+        if (noPrizes) { this.showToast('🎯 Phòng đã hết giải thưởng!'); }
+        const greetEl = $('result-greeting');
+        if (r.greeting) { greetEl.textContent = r.greeting; greetEl.style.display = 'block'; } else { greetEl.style.display = 'none'; }
+        // Show bank info section for monetary prizes
+        const bankSection = $('bank-info-section');
+        if ((prize.value || 0) > 0) { bankSection.style.display = 'block'; } else { bankSection.style.display = 'none'; }
         this.showScreen('screen-result');
         if (big) { Sound.play('bigwin'); Confetti.launch(5000); } else if (!luck) { Sound.play('win'); Confetti.launch(3000); } else Sound.play('click');
     },
-    async playAgain() { const r = await Storage.getRoom(this.currentRoom.code); if (!r) { this.showToast('Phòng không còn tồn tại'); this.showScreen('screen-home'); return; } this.currentRoom = r; if (r.mode === 'wheel') this.startWheelGame(); else this.startEnvelopeGame(); },
-    leaveGame() { this.currentPlayer = null; this.currentRoom = null; State.clear(); this.showScreen('screen-home'); },
+    async playAgain() { const r = await Storage.getRoom(this.currentRoom.code); if (!r) { this.showToast('Phòng không còn tồn tại'); this.showScreen('screen-home'); return; } this.currentRoom = r; if (r.mode === 'wheel') this.startWheelGame(); else if (r.mode === 'scratch') this.startScratchGame(); else this.startEnvelopeGame(); },
+    leaveGame() { ScratchCard.reset(); this.currentPlayer = null; this.currentRoom = null; State.clear(); this.showScreen('screen-home'); },
+    async sendBankInfo() {
+        if (!this.currentPlayer) return;
+        const bn = document.getElementById('bank-name').value.trim();
+        const ba = document.getElementById('bank-account').value.trim();
+        const bh = document.getElementById('bank-holder').value.trim();
+        if (!bn || !ba || !bh) { this.showToast('Vui lòng nhập đầy đủ thông tin'); Sound.play('error'); return; }
 
-    // ==================== HISTORY ====================
-    switchHistoryTab(tabId, btn) {
-        const p = btn.closest('.glass-card'); p.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-        p.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-        btn.classList.add('active'); document.getElementById(tabId).classList.add('active'); Sound.play('click');
+        const data = {
+            playerName: this.currentPlayer,
+            bankName: bn,
+            bankAccount: ba,
+            bankHolder: bh,
+            qrImage: this._uploadedQR || null,
+            time: new Date().toISOString()
+        };
+
+        try {
+            const roomRef = db.ref('rooms/' + this.currentRoom.code + '/bankInfos');
+            await roomRef.push().set(data);
+            this.showToast('Đã gửi thông tin chuyển khoản!'); Sound.play('success');
+            document.getElementById('bank-info-section').style.display = 'none';
+            this._uploadedQR = null;
+            document.getElementById('bank-qr-upload').value = '';
+            document.getElementById('qr-preview-wrapper').style.display = 'none';
+            document.getElementById('qr-upload-label').style.display = 'flex';
+        } catch (e) { this.showToast('Gửi lỗi'); }
+        document.getElementById('bank-name').value = '';
+        document.getElementById('bank-account').value = '';
+        document.getElementById('bank-holder').value = '';
+    },
+    handleQRUpload(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            this._uploadedQR = event.target.result;
+            const preview = document.getElementById('qr-preview-img');
+            preview.src = this._uploadedQR;
+            document.getElementById('qr-preview-wrapper').style.display = 'block';
+            document.getElementById('qr-upload-label').style.display = 'none';
+        };
+        reader.readAsDataURL(file);
+    },
+    showPaymentDetail(playerName) {
+        if (!this.currentRoom || !this.currentRoom.bankInfos) return;
+        const info = Object.values(this.currentRoom.bankInfos).find(b => b.playerName === playerName);
+        if (!info) { this.showToast('Không tìm thấy thông tin'); return; }
+        const details = `
+            <div style="text-align:left;padding:15px;background:rgba(0,0,0,0.2);border-radius:12px;border:1px solid var(--border-glow);margin-bottom:15px">
+                <div style="margin-bottom:8px">🏦 <strong>Ngân hàng:</strong> ${this.esc(info.bankName)}</div>
+                <div style="margin-bottom:8px">💳 <strong>STK:</strong> ${this.esc(info.bankAccount)}</div>
+                <div style="margin-bottom:8px">👤 <strong>Chủ TK:</strong> ${this.esc(info.bankHolder)}</div>
+            </div>
+            ${info.qrImage ? `<img src="${info.qrImage}" style="width:100%;border-radius:12px;border:2px solid var(--gold-400);box-shadow:var(--shadow-gold)" onclick="App.showFullQR('${info.qrImage}')">` : '<p class="text-muted">Không có ảnh QR</p>'}
+        `;
+        const modal = document.getElementById('qr-view-modal');
+        modal.querySelector('.qr-view-container').innerHTML = details;
+        modal.classList.add('active');
+        Sound.play('click');
+    },
+    showFullQR(src) {
+        const modal = document.getElementById('qr-view-modal');
+        modal.querySelector('.qr-view-container').innerHTML = `<img src="${src}" style="width:100%;border-radius:12px;border:2px solid var(--gold-400);box-shadow:var(--shadow-gold)">`;
+        modal.classList.add('active');
+        Sound.play('click');
     },
     async renderHistoryScreen() {
         if (!this.currentUser) return; const hist = await Storage.getUserHistory(this.currentUser.uid);
+        hist.created = Storage.ensureArray(hist.created); hist.joined = Storage.ensureArray(hist.joined);
         const ml = document.getElementById('my-rooms-list'), me = document.getElementById('my-rooms-empty');
         if (!hist.created.length) { ml.innerHTML = ''; ml.appendChild(me); me.style.display = 'block'; }
         else {
@@ -535,15 +1093,12 @@ const App = {
                     const t = new Date(m.time).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
                     return '<div style="font-size:0.85rem;margin-top:4px;border-top:1px solid rgba(251,191,36,0.1);padding-top:4px;display:flex;justify-content:space-between"><span style="color:var(--gold-300)">' + this.esc(m.prizeName) + '</span><span style="color:var(--text-muted);font-size:0.75rem">' + t + '</span></div>';
                 }).join('');
-
                 const roomName = (r ? r.name : rj.name) || 'Phòng';
                 const status = r ? '' : ' <span class="text-muted" style="font-size:0.8em">(Đã xoá)</span>';
-
                 const card = document.createElement('div'); card.className = 'history-room-card';
                 card.innerHTML = '<div class="history-room-header"><span class="history-room-name">' + this.esc(roomName) + status + '</span><span class="history-room-code">#' + rj.code + '</span></div>' +
                     '<div class="history-room-meta"><span>👤 ' + this.esc(rj.playerName) + '</span><span>🎰 ' + myWins.length + ' lượt</span><span>💰 ' + this.formatMoney(tm) + '</span></div>' +
                     (list ? '<div style="margin-top:8px">' + list + '</div>' : '');
-
                 jl.appendChild(card);
             }
         }

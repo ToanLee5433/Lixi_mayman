@@ -27,6 +27,31 @@
 
     <div class="toast" id="toast"></div>
 
+    <!-- QR View Modal -->
+    <div class="modal" id="qr-view-modal">
+        <div class="modal-content glass-card" style="max-width:400px;text-align:center">
+            <h3 class="section-title">🖼️ Ảnh QR Ngân Hàng</h3>
+            <div class="qr-view-container">
+                <img id="qr-view-img" src="" style="width:100%;border-radius:var(--radius-md);margin:15px 0">
+            </div>
+            <button class="btn btn-outline btn-block"
+                onclick="document.getElementById('qr-view-modal').classList.remove('active')">Đóng</button>
+        </div>
+    </div>
+
+    <!-- QR Code Modal -->
+    <div class="modal-overlay" id="qr-modal">
+        <div class="modal-content glass-card">
+            <h3 class="section-title" style="justify-content:center">📱 Chia Sẻ Phòng</h3>
+            <div id="qr-code" style="text-align:center;margin:16px 0"></div>
+            <p class="text-muted text-center" style="font-size:0.85rem">Quét mã QR để vào phòng ngay</p>
+            <div style="display:flex;gap:8px;margin-top:16px">
+                <button class="btn btn-gold btn-block" id="btn-share-native">📤 Chia sẻ</button>
+                <button class="btn btn-outline btn-block" id="btn-qr-close">✕ Đóng</button>
+            </div>
+        </div>
+    </div>
+
     <!-- ====== APP CONTAINER ====== -->
     <div class="app-container">
 
@@ -104,6 +129,12 @@
                     </svg>
                     Đăng nhập bằng Google
                 </button>
+
+                <div class="auth-divider"><span>hoặc</span></div>
+
+                <button class="btn btn-outline btn-block" id="btn-guest-play">
+                    👻 Chơi ẩn danh (không cần đăng nhập)
+                </button>
             </div>
         </div>
 
@@ -145,9 +176,63 @@
                 </div>
             </div>
 
-            <button class="btn btn-outline home-history-btn" id="btn-history">
-                📜 Xem lịch sử phòng
-            </button>
+            <div style="display:flex;gap:8px;width:100%;margin-top:16px">
+                <button class="btn btn-outline btn-block" id="btn-history">📜 Lịch sử</button>
+                <button class="btn btn-outline btn-block" id="btn-my-stats">📊 Thống kê</button>
+            </div>
+
+            <!-- Theme + Music Selectors -->
+            <div class="glass-card" style="margin-top:12px">
+                <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+                    <div style="flex:1;min-width:130px">
+                        <label style="font-size:0.8rem;color:var(--gold-300);margin-bottom:4px;display:block">🎨 Giao
+                            diện</label>
+                        <select class="input-field" id="theme-selector" style="font-size:0.85rem">
+                            <option value="classic">🏮 Cổ điển Đỏ-Vàng</option>
+                            <option value="jade">🍀 Phỉ Thuý Xanh</option>
+                            <option value="sakura">🌸 Hoa Anh Đào</option>
+                            <option value="royal">👑 Hoàng Gia Tím</option>
+                            <option value="midnight">🌙 Đêm Trăng</option>
+                        </select>
+                    </div>
+                    <div style="flex:1;min-width:130px">
+                        <label style="font-size:0.8rem;color:var(--gold-300);margin-bottom:4px;display:block">🎵 Nhạc
+                            nền</label>
+                        <select class="input-field" id="music-selector" style="font-size:0.85rem">
+                            <option value="music.mp3">🎵 Xuân truyền thống</option>
+                            <option value="music2.mp3">🎶 Jazz Tết</option>
+                            <option value="music3.mp3">🎼 Lofi chill</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========== SCREEN: PERSONAL STATS ========== -->
+        <div class="screen" id="screen-stats">
+            <button class="back-btn" id="back-stats">← Quay lại</button>
+            <div class="brand">
+                <div class="brand-icon">📊</div>
+                <h1 class="brand-title" style="font-size:1.5rem">Thống Kê Cá Nhân</h1>
+            </div>
+            <div class="dashboard-stats" style="width:100%">
+                <div class="stat-card">
+                    <div class="stat-value" id="ps-rooms">0</div>
+                    <div class="stat-label">Phòng đã chơi</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="ps-wins">0</div>
+                    <div class="stat-label">Lần trúng</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="ps-total">0đ</div>
+                    <div class="stat-label">Tổng nhận</div>
+                </div>
+            </div>
+            <div class="glass-card" style="width:100%;margin-top:16px">
+                <h3 class="section-title">🏆 Giải lớn nhất</h3>
+                <div id="ps-best" class="text-muted">Chưa có dữ liệu</div>
+            </div>
         </div>
 
         <!-- ========== SCREEN: HISTORY ========== -->
@@ -204,7 +289,7 @@
 
                 <div class="input-group">
                     <label>🎮 Chế độ chơi</label>
-                    <div class="mode-grid">
+                    <div class="mode-grid mode-grid-3">
                         <div class="mode-card selected" id="mode-wheel">
                             <div class="mode-icon">🎡</div>
                             <div class="mode-name">Vòng Quay</div>
@@ -212,6 +297,10 @@
                         <div class="mode-card" id="mode-envelope">
                             <div class="mode-icon">🧧</div>
                             <div class="mode-name">Bốc Thăm</div>
+                        </div>
+                        <div class="mode-card" id="mode-scratch">
+                            <div class="mode-icon">🎫</div>
+                            <div class="mode-name">Cào Thẻ</div>
                         </div>
                     </div>
                 </div>
@@ -231,6 +320,38 @@
                 <div class="input-group">
                     <label>🔄 Số lượt chơi / người</label>
                     <input class="input-field" id="host-max-turns" type="number" value="1" min="1" max="10">
+                </div>
+
+                <div class="input-group">
+                    <div class="toggle-row" onclick="document.getElementById('host-remove-prize').click()">
+                        <div class="toggle-label">
+                            <span class="toggle-label-text">🎯 Lì xì đã mở sẽ được loại bỏ</span>
+                            <span class="toggle-label-desc">Giải thưởng đã trúng sẽ bị xóa, người sau không thể nhận
+                                lại</span>
+                        </div>
+                        <label class="toggle-switch" onclick="event.stopPropagation()">
+                            <input type="checkbox" id="host-remove-prize">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="input-group">
+                    <label>💬 Lời chúc riêng (tuỳ chọn)</label>
+                    <input class="input-field" id="host-greeting" type="text"
+                        placeholder="VD: Chúc mừng năm mới từ ABC!" maxlength="60">
+                </div>
+
+                <div class="input-group">
+                    <label>⏰ Thời hạn phòng</label>
+                    <select class="input-field" id="host-timer">
+                        <option value="0">Không giới hạn</option>
+                        <option value="1">1 giờ</option>
+                        <option value="6">6 giờ</option>
+                        <option value="24" selected>24 giờ</option>
+                        <option value="72">3 ngày</option>
+                        <option value="168">7 ngày</option>
+                    </select>
                 </div>
 
                 <button class="btn btn-gold btn-block btn-lg mt-md" id="btn-create-room">
@@ -258,7 +379,11 @@
                 <div class="room-code-label">MÃ PHÒNG</div>
                 <div class="room-code" id="dashboard-room-code"></div>
                 <p class="text-muted mt-sm" style="font-size:0.8rem">Chia sẻ mã này cho người chơi</p>
-                <button class="btn btn-outline btn-sm mt-md" id="btn-copy-code">📋 Sao chép mã</button>
+                <div style="display:flex;gap:8px;justify-content:center;margin-top:12px">
+                    <button class="btn btn-outline btn-sm" id="btn-copy-code">📋 Sao chép</button>
+                    <button class="btn btn-outline btn-sm" id="btn-show-qr">📱 QR Code</button>
+                    <button class="btn btn-outline btn-sm" id="btn-share-room">📤 Chia sẻ</button>
+                </div>
             </div>
 
             <div class="dashboard-stats">
@@ -279,6 +404,7 @@
             <div class="glass-card">
                 <div class="tabs">
                     <button class="tab active" id="dtab-btn-players">👥 Người chơi</button>
+                    <button class="tab" id="dtab-btn-leaderboard">🏆 Xếp hạng</button>
                     <button class="tab" id="dtab-btn-history">📜 Lịch sử</button>
                     <button class="tab" id="dtab-btn-settings">⚙️ Cài đặt</button>
                 </div>
@@ -303,6 +429,16 @@
                     </div>
                 </div>
 
+                <div class="tab-content" id="tab-leaderboard">
+                    <div class="scroll-area">
+                        <div id="leaderboard-list"></div>
+                        <div class="empty-state" id="leaderboard-empty">
+                            <div class="empty-icon">🏆</div>
+                            <p>Chưa có dữ liệu xếp hạng</p>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="tab-content" id="tab-history">
                     <div class="scroll-area">
                         <table class="data-table" id="history-table">
@@ -310,6 +446,7 @@
                                 <tr>
                                     <th>Tên</th>
                                     <th>Giải thưởng</th>
+                                    <th>Thanh toán</th>
                                     <th>Thời gian</th>
                                 </tr>
                             </thead>
@@ -319,11 +456,100 @@
                             <div class="empty-icon">📜</div>
                             <p>Chưa có lượt chơi nào</p>
                         </div>
+                        <button class="btn btn-outline btn-block btn-sm" id="btn-export-csv" style="margin-top:12px">📥
+                            Xuất CSV</button>
+                        <div id="bank-info-viewer" style="margin-top:16px"></div>
                     </div>
                 </div>
 
                 <div class="tab-content" id="tab-settings">
                     <div class="flex-col gap-md">
+                        <!-- Room Name -->
+                        <div class="input-group">
+                            <label>📛 Tên phòng</label>
+                            <input class="input-field" id="settings-room-name" type="text"
+                                placeholder="VD: Lì Xì Công Ty ABC" maxlength="30">
+                        </div>
+
+                        <!-- Game Mode -->
+                        <div class="input-group">
+                            <label>🎮 Chế độ chơi</label>
+                            <div class="mode-grid mode-grid-3">
+                                <div class="mode-card" id="settings-mode-wheel">
+                                    <div class="mode-icon">🎡</div>
+                                    <div class="mode-name">Vòng Quay</div>
+                                </div>
+                                <div class="mode-card" id="settings-mode-envelope">
+                                    <div class="mode-icon">🧧</div>
+                                    <div class="mode-name">Bốc Thăm</div>
+                                </div>
+                                <div class="mode-card" id="settings-mode-scratch">
+                                    <div class="mode-icon">🎫</div>
+                                    <div class="mode-name">Cào Thẻ</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Prize Configuration -->
+                        <div class="input-group">
+                            <div
+                                style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px">
+                                <label style="margin-bottom:0">🎁 Cấu hình giải thưởng</label>
+                                <button class="btn btn-sm btn-outline" id="settings-btn-equal-prize"
+                                    style="font-size:0.75rem;padding:4px 12px">⚖️ Chia đều</button>
+                            </div>
+                            <p class="text-muted" style="font-size:0.8rem; margin-bottom:8px">Nhập tên giải và xác suất
+                                (tổng = 100%)</p>
+                            <div class="prize-list" id="settings-prize-list"></div>
+                            <button class="add-prize-btn" id="settings-btn-add-prize">+ Thêm giải thưởng</button>
+                        </div>
+
+                        <!-- Max Turns -->
+                        <div class="input-group">
+                            <label>🔄 Số lượt chơi / người</label>
+                            <input class="input-field" id="settings-max-turns" type="number" value="1" min="1" max="10">
+                        </div>
+
+                        <!-- Remove Prize on Win -->
+                        <div class="input-group">
+                            <div class="toggle-row" onclick="document.getElementById('settings-remove-prize').click()">
+                                <div class="toggle-label">
+                                    <span class="toggle-label-text">🎯 Lì xì đã mở sẽ được loại bỏ</span>
+                                    <span class="toggle-label-desc">Giải thưởng đã trúng sẽ bị xóa, người sau không thể
+                                        nhận lại</span>
+                                </div>
+                                <label class="toggle-switch" onclick="event.stopPropagation()">
+                                    <input type="checkbox" id="settings-remove-prize">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="input-group">
+                            <label>💬 Lời chúc riêng</label>
+                            <input class="input-field" id="settings-greeting" type="text"
+                                placeholder="VD: Chúc mừng năm mới!" maxlength="60">
+                        </div>
+
+                        <div class="input-group">
+                            <label>⏰ Thời hạn phòng</label>
+                            <select class="input-field" id="settings-timer">
+                                <option value="0">Không giới hạn</option>
+                                <option value="1">1 giờ</option>
+                                <option value="6">6 giờ</option>
+                                <option value="24">24 giờ</option>
+                                <option value="72">3 ngày</option>
+                                <option value="168">7 ngày</option>
+                            </select>
+                        </div>
+
+                        <!-- Save Button -->
+                        <button class="btn btn-gold btn-block btn-lg" id="btn-save-settings">💾 Lưu thay đổi</button>
+
+                        <!-- Divider -->
+                        <div style="border-top:1px solid rgba(251,191,36,0.15);margin:8px 0"></div>
+
+                        <!-- Room Actions -->
                         <button class="btn btn-outline btn-block" id="btn-toggle-room">🔒 Khóa phòng</button>
                         <button class="btn btn-outline btn-block" id="btn-reset-room">🔄 Reset phòng</button>
                         <button class="btn btn-red btn-block" id="btn-delete-room">🗑️ Xóa phòng</button>
@@ -398,13 +624,77 @@
             <div class="envelope-grid" id="envelope-grid"></div>
         </div>
 
+        <!-- ========== SCREEN: GAME SCRATCH ========== -->
+        <div class="screen" id="screen-game-scratch">
+            <button class="back-btn" id="back-scratch">← Rời phòng</button>
+            <div class="player-greeting">
+                Xin chào, <span id="scratch-player-name"></span>! 🎉
+            </div>
+            <h2 class="section-title" style="justify-content:center">🎫 Cào Thẻ May Mắn</h2>
+            <p class="text-muted text-center mb-md" id="scratch-turns-left">Bạn còn <strong>1</strong> lượt</p>
+            <p class="text-muted text-center mb-lg" style="font-size:0.85rem">Chọn một thẻ cào bất kỳ 👇</p>
+            <div class="scratch-grid" id="scratch-grid"></div>
+        </div>
+
+        <!-- Scratch Overlay (zoomed card) -->
+        <div class="scratch-overlay" id="scratch-overlay">
+            <div class="scratch-overlay-card">
+                <div class="scratch-overlay-header">🎫 Cào để lộ giải thưởng!</div>
+                <div class="scratch-stage">
+                    <canvas id="scratchCanvas" width="320" height="220"></canvas>
+                    <div class="scratch-prize" id="scratch-prize-text">?</div>
+                </div>
+                <p class="text-muted text-center" style="font-size:0.8rem;margin-top:12px">Dùng ngón tay hoặc chuột cào
+                    lớp phủ</p>
+            </div>
+        </div>
+
         <!-- ========== SCREEN: RESULT ========== -->
         <div class="screen" id="screen-result">
             <div class="result-container">
-                <div class="result-emoji" id="result-emoji">🎉</div>
+                <div class="result-spotlight"></div>
+                <div class="result-emoji animated-emoji" id="result-emoji">🎉</div>
                 <h2 class="result-title" id="result-title">Chúc mừng!</h2>
-                <div class="result-prize" id="result-prize">50,000đ</div>
+                <div class="result-prize result-prize-glow" id="result-prize">50,000đ</div>
                 <p class="result-message" id="result-message">Bạn đã nhận được lì xì!</p>
+                <p class="result-greeting" id="result-greeting" style="display:none"></p>
+
+                <!-- Bank Info Section -->
+                <div class="bank-info-section" id="bank-info-section" style="display:none">
+                    <div class="bank-info-header">🏦 Gửi thông tin nhận thưởng</div>
+                    <p class="text-muted" style="font-size:0.8rem;margin-bottom:12px">Để chủ phòng chuyển thưởng cho bạn
+                        sau khi phòng kết thúc</p>
+
+                    <div class="bank-form-grid">
+                        <div class="input-group">
+                            <input class="input-field" id="bank-name" type="text"
+                                placeholder="Tên ngân hàng (VD: Vietcombank)">
+                        </div>
+                        <div class="input-group">
+                            <input class="input-field" id="bank-account" type="text" placeholder="Số tài khoản">
+                        </div>
+                        <div class="input-group">
+                            <input class="input-field" id="bank-holder" type="text" placeholder="Tên chủ tài khoản">
+                        </div>
+                    </div>
+
+                    <!-- Styled File Upload -->
+                    <div class="qr-upload-container">
+                        <label for="bank-qr-upload" class="qr-upload-label" id="qr-upload-label">
+                            <div class="qr-upload-icon">📸</div>
+                            <div class="qr-upload-text">Thêm ảnh QR ngân hàng</div>
+                        </label>
+                        <input type="file" id="bank-qr-upload" accept="image/*" hidden>
+                        <div class="qr-preview-wrapper" id="qr-preview-wrapper" style="display:none">
+                            <img id="qr-preview-img" src="" alt="QR Preview">
+                            <button class="remove-qr-btn" id="btn-remove-qr">✕</button>
+                        </div>
+                    </div>
+
+                    <button class="btn btn-gold btn-block" id="btn-send-bank-info" style="margin-top:15px">🚀 Gửi thông
+                        tin ngay</button>
+                </div>
+
                 <div class="result-actions">
                     <button class="btn btn-gold" id="btn-play-again">🔄 Chơi tiếp</button>
                     <button class="btn btn-outline" id="btn-leave-result">🏠 Trang chủ</button>
@@ -422,6 +712,8 @@
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
+    <!-- QR Code Library -->
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
     <script>
         firebase.initializeApp({
             apiKey: "AIzaSyDm-SsIDxDhYST_5K6TM53z5aXLMrojyRo",
