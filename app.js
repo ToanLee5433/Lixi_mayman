@@ -489,6 +489,23 @@ const App = {
     initAuth() {
         auth.onAuthStateChanged(async (user) => {
             if (user) {
+                if (user.isAnonymous) {
+                    // Anonymous (guest) sign-in
+                    if (this._isGuest) {
+                        this.currentUser = user; // needed for Firebase rules
+                        this.updateUserBar(null);
+                        if (this._deepLinkRoom) {
+                            this.showScreen('screen-home', true);
+                            this.showScreen('screen-player-join');
+                        } else {
+                            this.showScreen('screen-player-join');
+                        }
+                    } else {
+                        // Stale anonymous session from previous visit
+                        await auth.signOut();
+                    }
+                    return;
+                }
                 this.currentUser = user; this._isGuest = false; this.updateUserBar(user);
                 const state = State.load();
                 if (this._deepLinkRoom) {
@@ -526,9 +543,12 @@ const App = {
 
     guestPlay() {
         this._isGuest = true;
-        this.currentUser = null;
-        this.updateUserBar(null);
-        this.showScreen('screen-player-join');
+        auth.signInAnonymously().catch(() => {
+            // Fallback nếu anonymous auth bị tắt trong Firebase Console
+            this.currentUser = null;
+            this.updateUserBar(null);
+            this.showScreen('screen-player-join');
+        });
         Sound.play('click');
     },
 
@@ -621,6 +641,7 @@ const App = {
     async logout() {
         if (this._isGuest) {
             this._isGuest = false; this.currentRoom = null; this.currentPlayer = null; State.clear();
+            if (auth.currentUser && auth.currentUser.isAnonymous) await auth.signOut();
             this.showScreen('screen-auth', true); return;
         }
         if (!confirm('Bạn có chắc muốn đăng xuất?')) return;
@@ -786,7 +807,11 @@ const App = {
         const t = document.getElementById(id); if (t) { t.classList.add('active'); t.style.animation = 'none'; t.offsetHeight; t.style.animation = ''; }
         if (!skip) this.persistState(id);
         if (id === 'screen-home') {
-            if (this._isGuest) { this._isGuest = false; this.currentRoom = null; this.currentPlayer = null; State.clear(); this.showScreen('screen-auth', true); return; }
+            if (this._isGuest) {
+                this._isGuest = false; this.currentRoom = null; this.currentPlayer = null; State.clear();
+                if (auth.currentUser && auth.currentUser.isAnonymous) auth.signOut();
+                this.showScreen('screen-auth', true); return;
+            }
             this.currentRoom = null; this.currentPlayer = null; State.clear();
         }
         if (id === 'screen-history') this.renderHistoryScreen();
