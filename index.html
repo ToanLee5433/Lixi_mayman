@@ -7,7 +7,10 @@
     <meta name="description" content="Lì Xì May Mắn - Trò chơi bốc thăm và vòng quay may mắn dịp Tết Nguyên Đán">
     <title>🧧 Lì Xì May Mắn</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧧</text></svg>">
-    <link rel="stylesheet" href="style.css?v=036e663">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap">
+    <link rel="stylesheet" href="style.css?v=20260221">
 </head>
 
 <body>
@@ -738,7 +741,7 @@
 
     </div>
 
-    <audio id="bgMusic" loop preload="auto">
+    <audio id="bgMusic" loop preload="none">
         <source src="music1.mp3" type="audio/mpeg">
     </audio>
 
@@ -746,8 +749,8 @@
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
-    <!-- QR Code Library -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <!-- QR Code Library (async: only needed on-demand) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" async></script>
     <script>
         firebase.initializeApp({
             apiKey: "AIzaSyDm-SsIDxDhYST_5K6TM53z5aXLMrojyRo",
@@ -761,7 +764,7 @@
         window.db = firebase.database();
         window.auth = firebase.auth();
     </script>
-    <script src="app.js?v=036e663"></script>
+    <script src="app.js?v=20260221" defer></script>
 </body>
 
 </html>

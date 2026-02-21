@@ -6,6 +6,12 @@
                 ".write": "auth != null"
             }
         },
+        "bankInfos": {
+            "$roomId": {
+                ".read": true,
+                ".write": true
+            }
+        },
         "users": {
             "$uid": {
                 ".read": "auth != null && auth.uid == $uid",

@@ -57,7 +57,11 @@ const Storage = {
             if (h.joined.length > 50) h.joined = h.joined.slice(0, 50);
             await this.userRef(uid).child('history').set(h);
         } catch (e) { console.error('saveWin error', e); }
-    }
+    },
+    // --- BankInfos: stored at separate path to keep room data lean ---
+    bankInfoRef(code) { return db.ref('bankInfos/' + code); },
+    onBankInfoChange(code, cb) { this.bankInfoRef(code).on('value', s => { const d = s.val(); cb(d ? Object.values(d) : []); }); },
+    offBankInfoChange(code) { this.bankInfoRef(code).off('value'); }
 };
 
 const State = {
@@ -268,7 +272,7 @@ const ScratchCard = {
             drawing = false;
         };
     },
-    init(prize) { this.prize = prize; this.revealed = false; this.renderGrid(); },
+    init(prize, freshRoom) { this.prize = prize; this.freshRoom = freshRoom || null; this.revealed = false; this.renderGrid(); },
     checkReveal() {
         if (this.revealed) return;
         // Sample only the center zone (x:60-260, y:20-140) where the prize text is displayed.
@@ -280,9 +284,10 @@ const ScratchCard = {
             this.revealed = true;
             this.ctx.clearRect(0, 0, 320, 200); // auto-wipe remaining scratch layer
             Sound.play('win');
+            const fr = this.freshRoom;
             setTimeout(() => {
                 document.getElementById('scratch-overlay').classList.remove('active');
-                App.handlePrizeWon(this.prize);
+                App.handlePrizeWon(this.prize, fr);
             }, 900);
         }
     },
@@ -294,7 +299,9 @@ const ScratchCard = {
 };
 
 const App = {
-    currentRoom: null, currentPlayer: null, currentUser: null, selectedMode: 'wheel', dashboardListener: null, settingsPrizes: [], _lastPlayerCount: 0,
+    currentRoom: null, currentPlayer: null, currentUser: null, selectedMode: 'wheel',
+    dashboardListener: null, _bankInfoListener: null, _bankInfos: [],
+    settingsPrizes: [], _lastPlayerCount: 0, _settingsDirty: false,
     defaultPrizes: [
         { name: '10,000d', weight: 30, value: 10000 }, { name: '20,000d', weight: 25, value: 20000 },
         { name: '50,000d', weight: 15, value: 50000 }, { name: '100,000d', weight: 8, value: 100000 },
@@ -448,6 +455,13 @@ const App = {
         on('settings-btn-add-prize', () => this.addSettingsPrize());
         on('settings-btn-equal-prize', () => this.equalSettingsPrizes());
         on('btn-save-settings', () => this.saveSettings());
+        // Settings dirty-state tracking: prevent Firebase refresh from overwriting in-progress edits
+        ['settings-room-name', 'settings-max-turns', 'settings-greeting'].forEach(id => {
+            const el = $(id); if (el) el.addEventListener('input', () => { this._settingsDirty = true; });
+        });
+        ['settings-timer', 'settings-remove-prize'].forEach(id => {
+            const el = $(id); if (el) el.addEventListener('change', () => { this._settingsDirty = true; });
+        });
 
         // Player join
         on('back-player-join', () => this.showScreen('screen-home'));
@@ -665,6 +679,7 @@ const App = {
         }
         if (!confirm('Bạn có chắc muốn đăng xuất?')) return;
         if (this.dashboardListener) { Storage.offRoomChange(this.dashboardListener); this.dashboardListener = null; }
+        if (this._bankInfoListener) { Storage.offBankInfoChange(this._bankInfoListener); this._bankInfoListener = null; this._bankInfos = []; }
         this.currentRoom = null; this.currentPlayer = null; State.clear();
         await auth.signOut(); this.showToast('Đã đăng xuất');
     },
@@ -822,6 +837,7 @@ const App = {
     showScreen(id, skip) {
         if (!this.currentUser && !this._isGuest && id !== 'screen-auth') return;
         if (this.dashboardListener && id !== 'screen-host-dashboard') { Storage.offRoomChange(this.dashboardListener); this.dashboardListener = null; }
+        if (this._bankInfoListener && id !== 'screen-host-dashboard') { Storage.offBankInfoChange(this._bankInfoListener); this._bankInfoListener = null; this._bankInfos = []; }
         document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
         const t = document.getElementById(id); if (t) { t.classList.add('active'); t.style.animation = 'none'; t.offsetHeight; t.style.animation = ''; }
         if (!skip) this.persistState(id);
@@ -892,6 +908,11 @@ const App = {
         const r = this.currentRoom; if (!r) return;
         document.getElementById('dashboard-room-name').textContent = r.name;
         document.getElementById('dashboard-room-code').textContent = r.code;
+        this._settingsDirty = false;
+        // Separate listener for bankInfos — keeps QR images out of room data stream
+        if (this._bankInfoListener) { Storage.offBankInfoChange(this._bankInfoListener); }
+        this._bankInfos = []; this._bankInfoListener = r.code;
+        Storage.onBankInfoChange(r.code, infos => { this._bankInfos = infos; this.renderBankInfos(this.currentRoom); });
         this.refreshDashboard(r); this.showScreen('screen-host-dashboard');
         this.dashboardListener = r.code; Storage.onRoomChange(r.code, d => { this.currentRoom = d; this.refreshDashboard(d); });
     },
@@ -928,7 +949,10 @@ const App = {
         if (!h.length) { htb.innerHTML = ''; he.style.display = 'block'; }
         else {
             he.style.display = 'none';
-            const bankMap = {}; Object.values(r.bankInfos || {}).forEach(b => bankMap[b.playerName] = b);
+            // Merge old in-room bankInfos (backward compat) + new separate-path bankInfos
+            const bankMap = {};
+            Object.values(r.bankInfos || {}).forEach(b => { bankMap[b.playerName] = b; });
+            (this._bankInfos || []).forEach(b => { bankMap[b.playerName] = b; });
             htb.innerHTML = h.slice().reverse().map(x => {
                 const t = new Date(x.time).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
                 const b = bankMap[x.playerName];
@@ -993,8 +1017,12 @@ const App = {
     renderBankInfos(r) {
         const viewer = document.getElementById('bank-info-viewer');
         if (!viewer) return;
-        const infos = Object.values(r.bankInfos || {}); // players who submitted
-        const history = r.history || [];
+        // Merge new separate-path infos with old in-room infos for backward compat
+        const newInfos = this._bankInfos || [];
+        const oldRoomInfos = Object.values(r ? (r.bankInfos || {}) : {});
+        const seen = new Set(newInfos.map(i => i.playerName));
+        const infos = [...newInfos, ...oldRoomInfos.filter(i => !seen.has(i.playerName))];
+        const history = r ? (r.history || []) : [];
         // Winners = unique players who won a monetary prize (value > 0)
         const winners = [...new Set(
             history.filter(h => (h.value || 0) > 0).map(h => h.playerName)
@@ -1138,7 +1166,7 @@ const App = {
 
     // ==================== SETTINGS ====================
     populateSettings(r) {
-        if (!r) return;
+        if (!r || this._settingsDirty) return; // skip if host is actively editing
         const nameInput = document.getElementById('settings-room-name');
         const turnsInput = document.getElementById('settings-max-turns');
         if (nameInput) nameInput.value = r.name || '';
@@ -1159,11 +1187,12 @@ const App = {
         document.querySelectorAll('#tab-settings .mode-card').forEach(c => c.classList.remove('selected'));
         const el = document.getElementById('settings-mode-' + m);
         if (el) el.classList.add('selected');
+        this._settingsDirty = true;
         Sound.play('click');
     },
-    addSettingsPrize() { this.settingsPrizes.push({ name: 'Giải mới', weight: 10, value: 0 }); this.renderPrizeList(this.settingsPrizes, 'settings-prize-list', 'settingsPrizes'); Sound.play('click'); },
-    removeSettingsPrize(i) { if (this.settingsPrizes.length <= 2) { this.showToast('Cần ít nhất 2 giải', 'error'); Sound.play('error'); return; } this.settingsPrizes.splice(i, 1); this.renderPrizeList(this.settingsPrizes, 'settings-prize-list', 'settingsPrizes'); Sound.play('click'); },
-    equalSettingsPrizes() { const n = this.settingsPrizes.length; const w = parseFloat((100 / n).toFixed(2)); this.settingsPrizes.forEach(p => { p.weight = w; }); this.renderPrizeList(this.settingsPrizes, 'settings-prize-list', 'settingsPrizes'); this.showToast('Đã chia đều: ' + w + '% mỗi giải'); Sound.play('click'); },
+    addSettingsPrize() { this._settingsDirty = true; this.settingsPrizes.push({ name: 'Giải mới', weight: 10, value: 0 }); this.renderPrizeList(this.settingsPrizes, 'settings-prize-list', 'settingsPrizes'); Sound.play('click'); },
+    removeSettingsPrize(i) { if (this.settingsPrizes.length <= 2) { this.showToast('Cần ít nhất 2 giải', 'error'); Sound.play('error'); return; } this._settingsDirty = true; this.settingsPrizes.splice(i, 1); this.renderPrizeList(this.settingsPrizes, 'settings-prize-list', 'settingsPrizes'); Sound.play('click'); },
+    equalSettingsPrizes() { const n = this.settingsPrizes.length; const w = parseFloat((100 / n).toFixed(2)); this.settingsPrizes.forEach(p => { p.weight = w; }); this._settingsDirty = true; this.renderPrizeList(this.settingsPrizes, 'settings-prize-list', 'settingsPrizes'); this.showToast('Đã chia đều: ' + w + '% mỗi giải'); Sound.play('click'); },
     async saveSettings() {
         if (!this.currentRoom) return;
         const name = document.getElementById('settings-room-name').value.trim();
@@ -1189,6 +1218,7 @@ const App = {
         this.currentRoom.greeting = (document.getElementById('settings-greeting').value || '').trim();
         this.currentRoom.timerHours = parseInt(document.getElementById('settings-timer').value) || 0;
         await Storage.saveRoom(this.currentRoom.code, this.currentRoom);
+        this._settingsDirty = false;
         document.getElementById('dashboard-room-name').textContent = name;
         this.showToast('Đã lưu thay đổi thành công! ✅');
         Sound.play('win');
@@ -1247,7 +1277,7 @@ const App = {
         if (!r.prizes || r.prizes.length === 0) { this.showToast('Đã hết giải thưởng!', 'error'); Sound.play('error'); return; }
         const tu = r.history.filter(h => h.playerName === this.currentPlayer).length; if (tu >= r.maxTurns) { this.showToast('Hết lượt!', 'error'); Sound.play('error'); return; }
         document.getElementById('spinBtn').disabled = true; document.getElementById('wheelCenterBtn').style.pointerEvents = 'none';
-        Wheel.spin(p => this.handlePrizeWon(p));
+        Wheel.spin(p => this.handlePrizeWon(p, r));
     },
     startEnvelopeGame() {
         document.getElementById('envelope-player-name').textContent = this.currentPlayer;
@@ -1271,7 +1301,7 @@ const App = {
         const tu = r.history.filter(h => h.playerName === this.currentPlayer).length; if (tu >= r.maxTurns) { this.showToast('Hết lượt!', 'error'); Sound.play('error'); return; }
         const prize = r.prizes[this.getWeightedRandom(r.prizes)]; document.getElementById('env-prize-' + idx).textContent = prize.name;
         document.querySelectorAll('.envelope').forEach(e => { if (e.id !== 'envelope-' + idx) e.classList.add('disabled'); });
-        Sound.play('flip'); env.classList.add('flipped'); setTimeout(() => this.handlePrizeWon(prize), 1200);
+        Sound.play('flip'); env.classList.add('flipped'); setTimeout(() => this.handlePrizeWon(prize, r), 1200);
     },
     startScratchGame() {
         ScratchCard.reset();
@@ -1287,11 +1317,11 @@ const App = {
         if (!r.prizes || r.prizes.length === 0) { this.showToast('Đã hết giải thưởng!', 'error'); Sound.play('error'); return; }
         const tu = r.history.filter(h => h.playerName === this.currentPlayer).length; if (tu >= r.maxTurns) { this.showToast('Hết lượt!', 'error'); Sound.play('error'); return; }
         const prize = r.prizes[this.getWeightedRandom(r.prizes)];
-        ScratchCard.init(prize);
+        ScratchCard.init(prize, r);
     },
 
-    async handlePrizeWon(prize) {
-        const r = await Storage.getRoom(this.currentRoom.code); if (!r) return; r.history = r.history || [];
+    async handlePrizeWon(prize, cachedRoom) {
+        const r = cachedRoom || await Storage.getRoom(this.currentRoom.code); if (!r) return; r.history = r.history || [];
         r.history.push({ playerName: this.currentPlayer, prizeName: prize.name, value: prize.value === -1 ? 0 : (prize.value || 0), time: new Date().toISOString(), uid: this.currentUser ? this.currentUser.uid : null });
         // Extra turn prize: increment maxTurns so the player can actually play again
         if (prize.value === -1) r.maxTurns = (r.maxTurns || 1) + 1;
@@ -1361,8 +1391,8 @@ const App = {
         };
 
         try {
-            const roomRef = db.ref('rooms/' + this.currentRoom.code + '/bankInfos');
-            await roomRef.push().set(data);
+            const bankRef = Storage.bankInfoRef(this.currentRoom.code);
+            await bankRef.push().set(data);
             this.showToast('Đã gửi thông tin chuyển khoản! ✅', 'success'); Sound.play('win');
             document.getElementById('bank-info-section').style.display = 'none';
             this._uploadedQR = null;
@@ -1390,8 +1420,8 @@ const App = {
         reader.readAsDataURL(file);
     },
     showPaymentDetail(playerName) {
-        if (!this.currentRoom || !this.currentRoom.bankInfos) return;
-        const info = Object.values(this.currentRoom.bankInfos).find(b => b.playerName === playerName);
+        const allInfos = [...(this._bankInfos || []), ...Object.values(this.currentRoom ? (this.currentRoom.bankInfos || {}) : {})];
+        const info = allInfos.find(b => b.playerName === playerName);
         if (!info) { this.showToast('Không tìm thấy thông tin'); return; }
         const details = `
             <div style="text-align:left;padding:15px;background:rgba(0,0,0,0.2);border-radius:12px;border:1px solid var(--border-glow);margin-bottom:15px">
@@ -1413,23 +1443,34 @@ const App = {
         Sound.play('click');
     },
     async renderHistoryScreen() {
-        if (!this.currentUser) return; const hist = await Storage.getUserHistory(this.currentUser.uid);
-        hist.created = Storage.ensureArray(hist.created); hist.joined = Storage.ensureArray(hist.joined);
+        if (!this.currentUser) return;
+        const hist = await Storage.getUserHistory(this.currentUser.uid);
+        hist.created = Storage.ensureArray(hist.created);
+        hist.joined = Storage.ensureArray(hist.joined);
+
+        // Parallel-fetch ALL rooms at once — eliminates N+1 sequential Firebase calls
+        const [createdRooms, joinedRooms] = await Promise.all([
+            Promise.all(hist.created.map(rc => Storage.getRoom(rc.code))),
+            Promise.all(hist.joined.map(rj => Storage.getRoom(rj.code)))
+        ]);
+
         const ml = document.getElementById('my-rooms-list'), me = document.getElementById('my-rooms-empty');
         if (!hist.created.length) { ml.innerHTML = ''; ml.appendChild(me); me.style.display = 'block'; }
         else {
-            ml.innerHTML = ''; for (const rc of hist.created) {
-                const r = await Storage.getRoom(rc.code), card = document.createElement('div'); card.className = 'history-room-card';
+            ml.innerHTML = '';
+            hist.created.forEach((rc, idx) => {
+                const r = createdRooms[idx], card = document.createElement('div'); card.className = 'history-room-card';
                 if (r) { const pc = (r.history || []).length, plc = (r.players || []).length, tm = (r.history || []).reduce((s, h) => s + (h.value > 0 ? h.value : 0), 0); card.innerHTML = '<div class="history-room-header"><span class="history-room-name">' + this.esc(r.name) + '</span><span class="history-room-code">#' + r.code + '</span></div><div class="history-room-meta"><span>👥 ' + plc + '</span><span>🎰 ' + pc + '</span><span>💰 ' + this.formatMoney(tm) + '</span></div>'; card.addEventListener('click', () => { this.currentRoom = r; this.showDashboard(); }); }
                 else { card.innerHTML = '<div class="history-room-header"><span class="history-room-name">' + this.esc(rc.name) + '</span><span class="history-room-code">#' + rc.code + '</span></div><div class="history-room-meta"><span class="text-muted">Phòng đã xoá</span></div>'; card.style.opacity = '0.5'; card.style.cursor = 'default'; }
                 ml.appendChild(card);
-            }
+            });
         }
         const jl = document.getElementById('joined-rooms-list'), je = document.getElementById('joined-rooms-empty');
         if (!hist.joined.length) { jl.innerHTML = ''; jl.appendChild(je); je.style.display = 'block'; }
         else {
-            jl.innerHTML = ''; for (const rj of hist.joined) {
-                const r = await Storage.getRoom(rj.code);
+            jl.innerHTML = '';
+            hist.joined.forEach((rj, idx) => {
+                const r = joinedRooms[idx];
                 let myWins = rj.wins || [];
                 if (myWins.length === 0 && r) {
                     const h = r.history || [];
@@ -1447,7 +1488,7 @@ const App = {
                     '<div class="history-room-meta"><span>👤 ' + this.esc(rj.playerName) + '</span><span>🎰 ' + myWins.length + ' lượt</span><span>💰 ' + this.formatMoney(tm) + '</span></div>' +
                     (list ? '<div style="margin-top:8px">' + list + '</div>' : '');
                 jl.appendChild(card);
-            }
+            });
         }
     },
 
